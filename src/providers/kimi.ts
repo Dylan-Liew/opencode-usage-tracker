@@ -178,6 +178,14 @@ function buildMainCard(input: {
 }
 
 function getKimiApiError(data: KimiUsageResponse | undefined): string | undefined {
+  const denialReason = data?.details
+    ?.map((detail) => detail.debug?.reason)
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  if (denialReason === "REASON_FEATURE_NO_PERMISSION") {
+    return "This Kimi Coding plan is inactive or expired. Please subscribe or renew access.";
+  }
+
   const localizedMessage = data?.details
     ?.map((detail) => detail.debug?.localizedMessage?.message)
     .find((value): value is string => typeof value === "string" && value.trim().length > 0);
