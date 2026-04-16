@@ -8,7 +8,7 @@ Only the providers below are currently supported in this repo.
 
 | Provider | Auth | Usage shown |
 | --- | --- | --- |
-| OpenAI/Codex | ChatGPT login or API key | ChatGPT login: primary quota, Spark quota when present, code review quota, credits. API key: informational card only. |
+| Codex | ChatGPT login or API key | ChatGPT login: primary quota, Spark quota when present, code review quota, credits. API key: informational card only. |
 | GitHub Copilot | OAuth token from OpenCode auth | Premium/chat quota snapshots, remaining usage, reset time. |
 
 ## Installation
@@ -70,7 +70,7 @@ The plugin reads credentials from OpenCode's `auth.json`.
 OpenCode populates this file when you connect providers through its normal auth
 flow.
 
-### OpenAI/Codex modes
+### Codex modes
 
 - **ChatGPT login**: fetches Codex usage from `https://chatgpt.com/backend-api/wham/usage`
 - **API key**: shows an informational card only, because ChatGPT subscription

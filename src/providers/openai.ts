@@ -1,5 +1,5 @@
 /**
- * OpenAI / Codex usage provider
+ * Codex usage provider
  *
  * ChatGPT auth usage endpoint: https://chatgpt.com/backend-api/wham/usage
  * OpenAI API key mode does not expose the same subscription usage windows.
@@ -10,9 +10,10 @@ import type { RawAuthJson, RawAuthJsonProvider } from "../utils/auth.ts";
 import { fetchJsonResponseWithTimeout, getFetchErrorMessage } from "../utils/http.ts";
 import { formatRelativeTime } from "../utils/format.ts";
 
-const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
-const OPENAI_PROVIDER_NAME = "OpenAI/Codex";
-const OPENAI_USAGE_TIMEOUT_MS = 5000;
+const USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
+const PROVIDER_LABEL = "Codex";
+const PROVIDER_COMMAND_TITLE = "Usage Codex";
+const USAGE_TIMEOUT_MS = 5000;
 
 interface OpenAIChatGPTAuth {
   mode: "chatgpt";
@@ -68,7 +69,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
     return [
       {
         providerId: openAIProvider.id,
-        provider: OPENAI_PROVIDER_NAME,
+        provider: PROVIDER_LABEL,
         planType: "API key",
         windows: [],
         extra: {
@@ -92,19 +93,19 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
     }
 
     const { response, data } = await fetchJsonResponseWithTimeout<CodexUsageResponse>(
-      CODEX_USAGE_ENDPOINT,
+      USAGE_ENDPOINT,
       {
         method: "GET",
         headers,
       },
-      OPENAI_USAGE_TIMEOUT_MS,
+      USAGE_TIMEOUT_MS,
     );
 
     if (response.status === 401) {
       return [
         {
           providerId: openAIProvider.id,
-          provider: OPENAI_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: "Token expired or invalid",
         },
@@ -115,7 +116,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       return [
         {
           providerId: openAIProvider.id,
-          provider: OPENAI_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: "Access denied (account ID may be required)",
         },
@@ -126,7 +127,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       return [
         {
           providerId: openAIProvider.id,
-          provider: OPENAI_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: `HTTP ${response.status}`,
         },
@@ -137,7 +138,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       return [
         {
           providerId: openAIProvider.id,
-          provider: OPENAI_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: "Usage response was empty",
         },
@@ -149,15 +150,15 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
     const seenProviders = new Set<string>();
 
     const primaryCard = buildRateLimitCard({
-      provider: `${OPENAI_PROVIDER_NAME} - Primary quota`,
-      description: "Main OpenAI/Codex quota.",
+      provider: `${PROVIDER_LABEL} - Primary quota`,
+      description: "Main Codex quota.",
       planType,
       rateLimit: data.rate_limit,
     });
     pushUniqueCard(usageCards, seenProviders, 10, primaryCard);
 
     const codeReviewCard = buildRateLimitCard({
-      provider: `${OPENAI_PROVIDER_NAME} - Code review`,
+      provider: `${PROVIDER_LABEL} - Code review`,
       description: "Separate code review quota.",
       planType,
       rateLimit: data.code_review_rate_limit,
@@ -188,7 +189,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
     return [
       {
         providerId: openAIProvider.id,
-        provider: OPENAI_PROVIDER_NAME,
+        provider: PROVIDER_LABEL,
         planType,
         windows: [],
       },
@@ -197,7 +198,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
     return [
       {
         providerId: openAIProvider.id,
-        provider: OPENAI_PROVIDER_NAME,
+        provider: PROVIDER_LABEL,
         windows: [],
         error: getFetchErrorMessage(error),
       },
@@ -244,7 +245,7 @@ function buildCreditsCard(credits?: CodexUsageResponse["credits"], planType?: st
 
   return {
     providerId: openAIProvider.id,
-    provider: `${OPENAI_PROVIDER_NAME} - Credits`,
+    provider: `${PROVIDER_LABEL} - Credits`,
     description: "Credits can be used beyond your included plan quota.",
     planType,
     windows: [],
@@ -316,14 +317,14 @@ function getAdditionalLimitCardMeta(limit: AdditionalRateLimit): {
 
   if (isSparkLimitName(rawName)) {
     return {
-      provider: `${OPENAI_PROVIDER_NAME} - ${humanizedName}`,
+      provider: `${PROVIDER_LABEL} - ${humanizedName}`,
       description: "Separate Spark quota.",
       order: 20,
     };
   }
 
   return {
-    provider: `${OPENAI_PROVIDER_NAME} - ${humanizedName}`,
+    provider: `${PROVIDER_LABEL} - ${humanizedName}`,
   };
 }
 
@@ -474,8 +475,8 @@ function resolveOpenAIAuth(rawAuth: RawAuthJson): OpenAIAuth | undefined {
 
 export const openAIProvider = {
   id: "openai",
-  label: OPENAI_PROVIDER_NAME,
-  commandTitle: "Usage OpenAI",
+  label: PROVIDER_LABEL,
+  commandTitle: PROVIDER_COMMAND_TITLE,
   order: 10,
   resolveAuth: resolveOpenAIAuth,
   fetchFromRawAuth: async (rawAuth) => {

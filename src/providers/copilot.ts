@@ -9,9 +9,10 @@ import type { RawAuthJson } from "../utils/auth.ts";
 import { fetchJsonResponseWithTimeout, getFetchErrorMessage } from "../utils/http.ts";
 import { formatRelativeTime } from "../utils/format.ts";
 
-const COPILOT_USER_ENDPOINT = "https://api.github.com/copilot_internal/user";
-const COPILOT_PROVIDER_NAME = "GitHub Copilot";
-const COPILOT_USAGE_TIMEOUT_MS = 5000;
+const USAGE_ENDPOINT = "https://api.github.com/copilot_internal/user";
+const PROVIDER_LABEL = "GitHub Copilot";
+const PROVIDER_COMMAND_TITLE = "Usage Copilot";
+const USAGE_TIMEOUT_MS = 5000;
 
 interface QuotaSnapshot {
   quota_id: string;
@@ -36,7 +37,7 @@ interface CopilotUserResponse {
 async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
   try {
     const { response, data } = await fetchJsonResponseWithTimeout<CopilotUserResponse>(
-      COPILOT_USER_ENDPOINT,
+      USAGE_ENDPOINT,
       {
         method: "GET",
         headers: {
@@ -47,14 +48,14 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
           "User-Agent": "opencode-usage-tracker/1.0.0",
         },
       },
-      COPILOT_USAGE_TIMEOUT_MS,
+      USAGE_TIMEOUT_MS,
     );
 
     if (!response.ok) {
       return [
         {
           providerId: copilotProvider.id,
-          provider: COPILOT_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: `API error: ${response.status}`,
         },
@@ -65,7 +66,7 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
       return [
         {
           providerId: copilotProvider.id,
-          provider: COPILOT_PROVIDER_NAME,
+          provider: PROVIDER_LABEL,
           windows: [],
           error: "Usage response was empty",
         },
@@ -138,7 +139,7 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
     return [
       {
         providerId: copilotProvider.id,
-        provider: COPILOT_PROVIDER_NAME,
+        provider: PROVIDER_LABEL,
         planType,
         windows,
         extra: Object.keys(extra).length > 0 ? extra : undefined,
@@ -148,7 +149,7 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
     return [
       {
         providerId: copilotProvider.id,
-        provider: COPILOT_PROVIDER_NAME,
+        provider: PROVIDER_LABEL,
         windows: [],
         error: getFetchErrorMessage(error),
       },
@@ -174,8 +175,8 @@ function resolveCopilotAuth(rawAuth: RawAuthJson): string | undefined {
 
 export const copilotProvider = {
   id: "copilot",
-  label: COPILOT_PROVIDER_NAME,
-  commandTitle: "Usage Copilot",
+  label: PROVIDER_LABEL,
+  commandTitle: PROVIDER_COMMAND_TITLE,
   order: 20,
   resolveAuth: resolveCopilotAuth,
   fetchFromRawAuth: async (rawAuth) => {
