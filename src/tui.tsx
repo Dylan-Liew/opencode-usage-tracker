@@ -5,11 +5,6 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plug
 import { createEffect, For, Show } from "solid-js";
 import {
   ALL_PROVIDERS_SCOPE,
-  USAGE_COMMAND_SHOW,
-  USAGE_COMMAND_OPEN_PICKER,
-  USAGE_COMMAND_OPEN_ALL,
-} from "./constants.ts";
-import {
   getProviderCommands,
   getProviderScopeOptions,
   getProviderScopeLabelFromValue,
@@ -21,6 +16,9 @@ import type { UsageCard, UsageResult, UsageWindow } from "./types.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
 const BAR_WIDTH = 24;
+const USAGE_COMMAND_SHOW = "plugin.usage.show";
+const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
+const USAGE_COMMAND_OPEN_ALL = "plugin.usage.open.all";
 
 const PICKER_OPTIONS = getProviderScopeOptions();
 

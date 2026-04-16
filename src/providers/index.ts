@@ -2,11 +2,12 @@
  * Provider registry - exports all usage providers
  */
 
-import { ALL_PROVIDERS_SCOPE } from "../constants.ts";
 import type { UsageProviderDefinition } from "../types.ts";
 import type { RawAuthJson } from "../utils/auth.ts";
 import { copilotProvider } from "./copilot.ts";
 import { openAIProvider } from "./openai.ts";
+
+export const ALL_PROVIDERS_SCOPE = "all" as const;
 
 export interface ProviderOption {
   title: string;
@@ -41,19 +42,21 @@ function assertProviderRegistry(): void {
   const seenProviderIds = new Set<string>();
 
   for (const provider of REGISTERED_PROVIDERS) {
-    if (provider.id === ALL_PROVIDERS_SCOPE) {
+    const providerId = String(provider.id);
+
+    if (providerId === ALL_PROVIDERS_SCOPE) {
       throw new Error(`Provider id \"${ALL_PROVIDERS_SCOPE}\" is reserved.`);
     }
 
     if (!Number.isFinite(provider.order)) {
-      throw new Error(`Provider \"${provider.id}\" has an invalid order value.`);
+      throw new Error(`Provider \"${providerId}\" has an invalid order value.`);
     }
 
-    if (seenProviderIds.has(provider.id)) {
-      throw new Error(`Duplicate provider id \"${provider.id}\" detected.`);
+    if (seenProviderIds.has(providerId)) {
+      throw new Error(`Duplicate provider id \"${providerId}\" detected.`);
     }
 
-    seenProviderIds.add(provider.id);
+    seenProviderIds.add(providerId);
   }
 }
 

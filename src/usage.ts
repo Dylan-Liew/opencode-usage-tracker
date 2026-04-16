@@ -1,5 +1,5 @@
-import { ALL_PROVIDERS_SCOPE } from "./constants.ts";
 import {
+  ALL_PROVIDERS_SCOPE,
   getConfiguredProviders,
   getProviderById,
   type ProviderScope,

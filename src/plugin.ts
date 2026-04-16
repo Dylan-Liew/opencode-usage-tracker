@@ -6,9 +6,9 @@
  */
 
 import type { Hooks, PluginInput } from "@opencode-ai/plugin";
-import { USAGE_COMMAND_OPEN_PICKER } from "./constants.ts";
 
 const HANDLED_SENTINEL = "__USAGE_TRACKER_HANDLED__";
+const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
 
 function isUsageCommand(command: string): boolean {
   return command.replace(/^\//, "") === "usage";
