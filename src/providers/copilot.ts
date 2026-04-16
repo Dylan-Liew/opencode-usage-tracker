@@ -56,6 +56,9 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
         {
           providerId: copilotProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: `API error: ${response.status}`,
         },
@@ -67,6 +70,9 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
         {
           providerId: copilotProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: "Usage response was empty",
         },
@@ -140,6 +146,9 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
       {
         providerId: copilotProvider.id,
         provider: PROVIDER_LABEL,
+        sectionId: "main",
+        sectionKind: "main",
+        sectionOrder: 10,
         planType,
         windows,
         extra: Object.keys(extra).length > 0 ? extra : undefined,
@@ -150,6 +159,9 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
       {
         providerId: copilotProvider.id,
         provider: PROVIDER_LABEL,
+        sectionId: "main",
+        sectionKind: "main",
+        sectionOrder: 10,
         windows: [],
         error: getFetchErrorMessage(error),
       },

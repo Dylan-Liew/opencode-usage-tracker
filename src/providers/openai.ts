@@ -70,6 +70,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       {
         providerId: openAIProvider.id,
         provider: PROVIDER_LABEL,
+        sectionId: "main",
+        sectionKind: "main",
+        sectionOrder: 10,
         planType: "API key",
         windows: [],
         extra: {
@@ -106,6 +109,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
         {
           providerId: openAIProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: "Token expired or invalid",
         },
@@ -117,6 +123,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
         {
           providerId: openAIProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: "Access denied (account ID may be required)",
         },
@@ -128,6 +137,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
         {
           providerId: openAIProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: `HTTP ${response.status}`,
         },
@@ -139,6 +151,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
         {
           providerId: openAIProvider.id,
           provider: PROVIDER_LABEL,
+          sectionId: "main",
+          sectionKind: "main",
+          sectionOrder: 10,
           windows: [],
           error: "Usage response was empty",
         },
@@ -147,37 +162,41 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
 
     const planType = formatPlanType(data.plan_type);
     const usageCards: OpenAILimitCard[] = [];
-    const seenProviders = new Set<string>();
+    const seenSections = new Set<string>();
+    const creditsExtra = buildCreditsExtra(data.credits);
 
     const primaryCard = buildRateLimitCard({
-      provider: `${PROVIDER_LABEL} - Primary quota`,
-      description: "Main Codex quota.",
+      sectionId: "main",
+      sectionKind: "main",
+      sectionOrder: 10,
       planType,
       rateLimit: data.rate_limit,
+      extra: creditsExtra,
     });
-    pushUniqueCard(usageCards, seenProviders, 10, primaryCard);
+    pushUniqueCard(usageCards, seenSections, 10, primaryCard);
 
     const codeReviewCard = buildRateLimitCard({
-      provider: `${PROVIDER_LABEL} - Code review`,
-      description: "Separate code review quota.",
+      sectionId: "code-review",
+      sectionKind: "special",
+      sectionLabel: "Code Review",
+      sectionOrder: 30,
       planType,
       rateLimit: data.code_review_rate_limit,
     });
-    pushUniqueCard(usageCards, seenProviders, 30, codeReviewCard);
+    pushUniqueCard(usageCards, seenSections, 30, codeReviewCard);
 
     for (const [index, additionalLimit] of (data.additional_rate_limits ?? []).entries()) {
       const meta = getAdditionalLimitCardMeta(additionalLimit);
       const additionalCard = buildRateLimitCard({
-        provider: meta.provider,
-        description: meta.description,
+        sectionId: meta.sectionId,
+        sectionKind: "special",
+        sectionLabel: meta.sectionLabel,
+        sectionOrder: meta.order ?? 40 + index,
         planType,
         rateLimit: additionalLimit.rate_limit,
       });
-      pushUniqueCard(usageCards, seenProviders, meta.order ?? 40 + index, additionalCard);
+      pushUniqueCard(usageCards, seenSections, meta.order ?? 40 + index, additionalCard);
     }
-
-    const creditsCard = buildCreditsCard(data.credits, planType);
-    pushUniqueCard(usageCards, seenProviders, 90, creditsCard);
 
     if (usageCards.length > 0) {
       return usageCards
@@ -190,8 +209,12 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       {
         providerId: openAIProvider.id,
         provider: PROVIDER_LABEL,
+        sectionId: "main",
+        sectionKind: "main",
+        sectionOrder: 10,
         planType,
         windows: [],
+        extra: creditsExtra,
       },
     ];
   } catch (error) {
@@ -199,6 +222,9 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       {
         providerId: openAIProvider.id,
         provider: PROVIDER_LABEL,
+        sectionId: "main",
+        sectionKind: "main",
+        sectionOrder: 10,
         windows: [],
         error: getFetchErrorMessage(error),
       },
@@ -207,50 +233,48 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
 }
 
 function buildRateLimitCard(input: {
-  provider: string;
-  description?: string;
+  sectionId: string;
+  sectionKind: UsageCard["sectionKind"];
+  sectionLabel?: string;
+  sectionOrder: number;
+  note?: string;
   planType?: string;
   rateLimit?: RateLimitBlock;
+  extra?: Record<string, string>;
 }): UsageCard | null {
   const windows = collectWindows(input.rateLimit);
 
-  if (windows.length === 0) {
+  if (windows.length === 0 && !hasExtraRows(input.extra) && !input.note) {
     return null;
   }
 
   return {
     providerId: openAIProvider.id,
-    provider: input.provider,
-    description: input.description,
+    provider: PROVIDER_LABEL,
+    sectionId: input.sectionId,
+    sectionKind: input.sectionKind,
+    sectionLabel: input.sectionLabel,
+    sectionOrder: input.sectionOrder,
+    note: input.note,
     planType: input.planType,
     windows,
+    extra: input.extra,
   };
 }
 
-function buildCreditsCard(credits?: CodexUsageResponse["credits"], planType?: string): UsageCard | null {
+function buildCreditsExtra(credits?: CodexUsageResponse["credits"]): Record<string, string> | undefined {
   if (!credits) {
-    return null;
+    return undefined;
   }
 
   const extra: Record<string, string> = {};
   if (credits.unlimited) {
-    extra.Remaining = "Unlimited";
+    extra.Credits = "Unlimited";
   } else if (typeof credits.balance === "string") {
-    extra.Remaining = credits.balance;
+    extra.Credits = credits.balance;
   }
 
-  if (Object.keys(extra).length === 0) {
-    return null;
-  }
-
-  return {
-    providerId: openAIProvider.id,
-    provider: `${PROVIDER_LABEL} - Credits`,
-    description: "Credits can be used beyond your included plan quota.",
-    planType,
-    windows: [],
-    extra,
-  };
+  return hasExtraRows(extra) ? extra : undefined;
 }
 
 function collectWindows(rateLimit?: RateLimitBlock): UsageCard["windows"] {
@@ -298,18 +322,20 @@ function toUsageWindow(key: string, window: RateLimitWindow) {
   };
 }
 
-function pushUniqueCard(results: OpenAILimitCard[], seenProviders: Set<string>, order: number, card: UsageCard | null): void {
-  if (!card || seenProviders.has(card.provider)) {
+function pushUniqueCard(results: OpenAILimitCard[], seenSections: Set<string>, order: number, card: UsageCard | null): void {
+  const key = card?.sectionId ?? `section-${order}`;
+
+  if (!card || seenSections.has(key)) {
     return;
   }
 
-  seenProviders.add(card.provider);
+  seenSections.add(key);
   results.push({ order, card });
 }
 
 function getAdditionalLimitCardMeta(limit: AdditionalRateLimit): {
-  provider: string;
-  description?: string;
+  sectionId: string;
+  sectionLabel: string;
   order?: number;
 } {
   const rawName = limit.limit_name || limit.metered_feature || "additional_limit";
@@ -317,14 +343,15 @@ function getAdditionalLimitCardMeta(limit: AdditionalRateLimit): {
 
   if (isSparkLimitName(rawName)) {
     return {
-      provider: `${PROVIDER_LABEL} - ${humanizedName}`,
-      description: "Separate Spark quota.",
+      sectionId: `additional-${normalizeSectionId(rawName)}`,
+      sectionLabel: humanizedName,
       order: 20,
     };
   }
 
   return {
-    provider: `${PROVIDER_LABEL} - ${humanizedName}`,
+    sectionId: `additional-${normalizeSectionId(rawName)}`,
+    sectionLabel: humanizedName,
   };
 }
 
@@ -418,6 +445,10 @@ function isUsageCard(value: UsageCard | null): value is UsageCard {
   return value !== null;
 }
 
+function hasExtraRows(extra?: Record<string, string>): boolean {
+  return Boolean(extra && Object.keys(extra).length > 0);
+}
+
 function isRateLimitWindow(value: unknown): value is RateLimitWindow {
   return Boolean(
     value &&
@@ -430,6 +461,10 @@ function isRateLimitWindow(value: unknown): value is RateLimitWindow {
 function normalizeAuthType(type?: string): string | undefined {
   const normalized = type?.trim().toLowerCase();
   return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeSectionId(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
 }
 
 function getStringValue(provider: RawAuthJsonProvider | undefined, ...keys: string[]): string | undefined {

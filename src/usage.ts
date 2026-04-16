@@ -80,6 +80,9 @@ async function fetchUsageData(
     results.push({
       providerId: definition.id,
       provider: definition.label,
+      sectionId: "main",
+      sectionKind: "main",
+      sectionOrder: 10,
       windows: [],
       error: result.reason instanceof Error ? result.reason.message : "Unknown error",
     });

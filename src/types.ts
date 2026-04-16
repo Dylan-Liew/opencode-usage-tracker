@@ -12,10 +12,16 @@ export interface UsageWindow {
   rawResetAt?: string;
 }
 
+export type UsageSectionKind = "main" | "special";
+
 export interface UsageCard {
-  providerId?: string;
+  providerId: string;
   provider: string;
-  description?: string;
+  sectionId: string;
+  sectionKind: UsageSectionKind;
+  sectionLabel?: string;
+  sectionOrder: number;
+  note?: string;
   planType?: string;
   windows: UsageWindow[];
   extra?: Record<string, string>;

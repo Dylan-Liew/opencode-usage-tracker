@@ -2,7 +2,7 @@
 import { RGBA, TextAttributes } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, createMemo, For, Show } from "solid-js";
 import {
   ALL_PROVIDERS_SCOPE,
   getProviderCommands,
@@ -16,10 +16,35 @@ import type { UsageCard, UsageResult, UsageWindow } from "./types.ts";
 import { getRawAuthJson } from "./utils/auth.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
-const BAR_WIDTH = 24;
+const BAR_LABEL_WIDTH = 10;
+const BAR_TRACK_WIDTH = 28;
+const BAR_PERCENT_WIDTH = 4;
 const USAGE_COMMAND_SHOW = "plugin.usage.show";
 const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
 const USAGE_COMMAND_OPEN_ALL = "plugin.usage.open.all";
+
+interface UsageMetaRow {
+  label: string;
+  value: string;
+}
+
+interface UsageSectionView {
+  key: string;
+  kind: NonNullable<UsageCard["sectionKind"]>;
+  label?: string;
+  note?: string;
+  order: number;
+  windows: UsageWindow[];
+  rows: UsageMetaRow[];
+  error?: string;
+}
+
+interface UsageProviderView {
+  key: string;
+  provider: string;
+  planType?: string;
+  sections: UsageSectionView[];
+}
 
 function usageColor(api: TuiPluginApi, percent: number) {
   if (percent >= 90) return api.theme.current.error;
@@ -27,20 +52,84 @@ function usageColor(api: TuiPluginApi, percent: number) {
   return api.theme.current.primary;
 }
 
-function metaRows(provider: UsageCard): Array<{ label: string; value: string }> {
-  const rows: Array<{ label: string; value: string }> = [];
+function metaRows(section: UsageCard): UsageMetaRow[] {
+  const rows: UsageMetaRow[] = [];
 
-  for (const window of provider.windows) {
+  for (const window of section.windows) {
     if (window.resetTime) {
       rows.push({ label: `${window.label} resets`, value: window.resetTime });
     }
   }
 
-  for (const [label, value] of Object.entries(provider.extra ?? {})) {
+  for (const [label, value] of Object.entries(section.extra ?? {})) {
     rows.push({ label, value });
   }
 
   return rows;
+}
+
+function buildProviderViews(cards: UsageCard[]): UsageProviderView[] {
+  const groupedProviders = new Map<string, UsageProviderView>();
+
+  for (const card of cards) {
+    const providerKey = card.providerId;
+    const sectionKey = card.sectionId;
+    const sectionKind = card.sectionKind;
+    const sectionOrder = card.sectionOrder;
+    const existingProvider = groupedProviders.get(providerKey);
+
+    if (existingProvider) {
+      if (!existingProvider.planType && card.planType) {
+        existingProvider.planType = card.planType;
+      }
+
+      existingProvider.sections.push({
+        key: sectionKey,
+        kind: sectionKind,
+        label: card.sectionLabel,
+        note: card.note,
+        order: sectionOrder,
+        windows: card.windows,
+        rows: metaRows(card),
+        error: card.error,
+      });
+
+      continue;
+    }
+
+    groupedProviders.set(providerKey, {
+      key: providerKey,
+      provider: card.provider,
+      planType: card.planType,
+      sections: [
+        {
+          key: sectionKey,
+          kind: sectionKind,
+          label: card.sectionLabel,
+          note: card.note,
+          order: sectionOrder,
+          windows: card.windows,
+          rows: metaRows(card),
+          error: card.error,
+        },
+      ],
+    });
+  }
+
+  return [...groupedProviders.values()].map((provider) => ({
+    ...provider,
+    sections: [...provider.sections].sort((left, right) => {
+      if (left.order !== right.order) {
+        return left.order - right.order;
+      }
+
+      if (left.kind === right.kind) {
+        return 0;
+      }
+
+      return left.kind === "main" ? -1 : 1;
+    }),
+  }));
 }
 
 function isOkResult(result: UsageResult): result is Extract<UsageResult, { kind: "ok" }> {
@@ -52,30 +141,80 @@ function isMessageResult(result: UsageResult): result is Extract<UsageResult, { 
 }
 
 function UsageBar(props: { api: TuiPluginApi; window: UsageWindow }) {
-  const filled = Math.max(0, Math.min(BAR_WIDTH, Math.round((props.window.usedPercent / 100) * BAR_WIDTH)));
-  const empty = BAR_WIDTH - filled;
+  const theme = props.api.theme.current;
+  const percent = Math.round(props.window.usedPercent);
+  const filledWidth = Math.max(0, Math.min(BAR_TRACK_WIDTH, Math.round((props.window.usedPercent / 100) * BAR_TRACK_WIDTH)));
   const color = usageColor(props.api, props.window.usedPercent);
 
   return (
     <box flexDirection="row" alignItems="center" gap={1}>
-      <text fg={props.api.theme.current.text} width={10}>
+      <text fg={theme.text} width={BAR_LABEL_WIDTH}>
         {props.window.label}
       </text>
-      <box flexDirection="row" gap={0}>
-        <text fg={color}>{"█".repeat(filled)}</text>
-        <text fg={props.api.theme.current.border}>{"░".repeat(empty)}</text>
+      <box width={BAR_TRACK_WIDTH} height={1} flexDirection="row" gap={0} backgroundColor={theme.backgroundElement}>
+        <Show when={filledWidth > 0}>
+          <box width={filledWidth} height={1} backgroundColor={color} />
+        </Show>
       </box>
-      <text fg={color} attributes={TextAttributes.BOLD}>
-        {`${Math.round(props.window.usedPercent)}%`}
+      <text fg={color} attributes={TextAttributes.BOLD} width={BAR_PERCENT_WIDTH}>
+        {`${percent}%`.padStart(BAR_PERCENT_WIDTH, " ")}
       </text>
     </box>
   );
 }
 
-function ProviderCard(props: { api: TuiPluginApi; provider: UsageCard }) {
+function SectionBlock(props: { api: TuiPluginApi; section: UsageSectionView }) {
   const theme = props.api.theme.current;
-  const rows = metaRows(props.provider);
-  const lastWindowIndex = props.provider.windows.length - 1;
+
+  return (
+    <box flexDirection="column" gap={0}>
+      <Show when={props.section.label}>
+        <box flexDirection="column" paddingBottom={1}>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            {props.section.label}
+          </text>
+        </box>
+      </Show>
+      <Show when={props.section.note}>
+        <text fg={theme.textMuted} paddingBottom={1}>
+          {props.section.note}
+        </text>
+      </Show>
+
+      <Show when={!props.section.error} fallback={<text fg={theme.error}>{props.section.error}</text>}>
+        <box flexDirection="column" gap={0}>
+          <For each={props.section.windows}>
+            {(window) => (
+              <box paddingBottom={1}>
+                <UsageBar api={props.api} window={window} />
+              </box>
+            )}
+          </For>
+
+          <Show when={props.section.rows.length > 0}>
+            <box flexDirection="column" gap={0}>
+              <For each={props.section.rows}>
+                {(row) => (
+                  <box flexDirection="row" justifyContent="space-between" gap={2}>
+                    <text fg={theme.textMuted}>{row.label}</text>
+                    <text fg={theme.text}>{row.value}</text>
+                  </box>
+                )}
+              </For>
+            </box>
+          </Show>
+
+          <Show when={props.section.windows.length === 0 && props.section.rows.length === 0}>
+            <text fg={theme.textMuted}>No usage data reported.</text>
+          </Show>
+        </box>
+      </Show>
+    </box>
+  );
+}
+
+function ProviderCard(props: { api: TuiPluginApi; provider: UsageProviderView }) {
+  const theme = props.api.theme.current;
 
   return (
     <box
@@ -90,48 +229,17 @@ function ProviderCard(props: { api: TuiPluginApi; provider: UsageCard }) {
       borderStyle="rounded"
     >
       <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
-        <box flexDirection="column" gap={0}>
-          <text fg={theme.text} attributes={TextAttributes.BOLD}>
-            {props.provider.provider}
-          </text>
-          <Show when={props.provider.description}>
-            <text fg={theme.textMuted}>{props.provider.description}</text>
-          </Show>
-        </box>
+        <text fg={theme.text} attributes={TextAttributes.BOLD}>
+          {props.provider.provider}
+        </text>
         <Show when={props.provider.planType}>
           <text fg={theme.textMuted}>{props.provider.planType}</text>
         </Show>
       </box>
 
-      <Show
-        when={!props.provider.error}
-        fallback={<text fg={theme.error}>{props.provider.error}</text>}
-      >
-        <box flexDirection="column" gap={0}>
-          <For each={props.provider.windows}>
-            {(window, index) => (
-              <box paddingBottom={index() === lastWindowIndex ? 1 : 1}>
-                <UsageBar api={props.api} window={window} />
-              </box>
-            )}
-          </For>
-          <Show when={rows.length > 0}>
-            <box flexDirection="column" gap={0}>
-              <For each={rows}>
-                {(row) => (
-                  <box flexDirection="row" justifyContent="space-between" gap={2}>
-                    <text fg={theme.textMuted}>{row.label}</text>
-                    <text fg={theme.text}>{row.value}</text>
-                  </box>
-                )}
-              </For>
-            </box>
-          </Show>
-          <Show when={props.provider.windows.length === 0 && rows.length === 0}>
-            <text fg={theme.textMuted}>No usage windows reported.</text>
-          </Show>
-        </box>
-      </Show>
+      <box flexDirection="column" gap={1}>
+        <For each={props.provider.sections}>{(section) => <SectionBlock api={props.api} section={section} />}</For>
+      </box>
     </box>
   );
 }
@@ -141,6 +249,10 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
   const theme = props.api.theme.current;
   const okResult = () => (isOkResult(props.result) ? props.result : undefined);
   const messageResult = () => (isMessageResult(props.result) ? props.result : undefined);
+  const providerViews = createMemo(() => {
+    const result = okResult();
+    return result ? buildProviderViews(result.providers) : [];
+  });
 
   createEffect(() => {
     const width = dimensions().width;
@@ -173,8 +285,8 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
 
       <scrollbox paddingLeft={4} paddingRight={4} maxHeight={Math.max(12, Math.floor(dimensions().height * 0.49))}>
         <Show when={okResult()}>
-          <box flexDirection="column" gap={0}>
-            <For each={okResult()?.providers ?? []}>{(provider) => <ProviderCard api={props.api} provider={provider} />}</For>
+          <box flexDirection="column" gap={1}>
+            <For each={providerViews()}>{(provider) => <ProviderCard api={props.api} provider={provider} />}</For>
           </box>
         </Show>
         <Show when={messageResult()}>
