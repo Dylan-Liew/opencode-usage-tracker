@@ -2,19 +2,7 @@
  * Formatting utilities for usage display
  */
 
-export interface UsageData {
-  provider: string;
-  planType?: string;
-  windows: UsageWindow[];
-  extra?: Record<string, string>;
-  error?: string;
-}
-
-export interface UsageWindow {
-  label: string;
-  usedPercent: number;
-  resetTime?: string;
-}
+import type { UsageCard } from "../types.ts";
 
 const PROGRESS_BAR_WIDTH = 14;
 const BOX_WIDTH = 49;
@@ -61,7 +49,7 @@ function padLine(content: string, width: number = BOX_WIDTH - 4): string {
 /**
  * Format a single provider's usage data
  */
-function formatProvider(data: UsageData): string[] {
+function formatProvider(data: UsageCard): string[] {
   const lines: string[] = [];
   
   // Provider header with plan type
@@ -104,7 +92,7 @@ function formatProvider(data: UsageData): string[] {
 /**
  * Format all provider usage data into a table
  */
-export function formatUsageTable(providers: UsageData[]): string {
+export function formatUsageTable(providers: UsageCard[]): string {
   const topBorder = "╭" + "─".repeat(BOX_WIDTH - 2) + "╮";
   const bottomBorder = "╰" + "─".repeat(BOX_WIDTH - 2) + "╯";
   const separator = "├" + "─".repeat(BOX_WIDTH - 2) + "┤";

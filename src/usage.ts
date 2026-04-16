@@ -1,24 +1,17 @@
-import { fetchCopilotUsage } from "./providers/copilot.ts";
-import { fetchOpenAIUsage } from "./providers/openai.ts";
-import { getAuthTokens, type AuthTokens } from "./utils/auth.ts";
-import { type UsageData } from "./utils/format.ts";
+import { ALL_PROVIDERS_SCOPE } from "./constants.ts";
 import {
-  PROVIDER_METADATA,
-  PROVIDER_ORDER,
-  type ConcreteProviderName,
-  type ProviderName,
-} from "./constants.ts";
+  getConfiguredProviders,
+  getProviderById,
+  type ProviderScope,
+} from "./providers/index.ts";
+import type { UsageCard, UsageProviderDefinition, UsageResult } from "./types.ts";
+import { getRawAuthJson } from "./utils/auth.ts";
 
-export type UsageResult =
-  | { kind: "ok"; provider: ProviderName; providers: UsageData[] }
-  | { kind: "empty"; provider: ProviderName; message: string }
-  | { kind: "error"; provider: ProviderName; message: string };
+export async function fetchUsageResult(provider: ProviderScope): Promise<UsageResult> {
+  const rawAuth = await getRawAuthJson();
+  const configuredProviders = rawAuth ? getConfiguredProviders(rawAuth) : [];
 
-export async function fetchUsageResult(provider: ProviderName): Promise<UsageResult> {
-  const tokens = await getAuthTokens();
-
-  const hasProviders = getProviderFetchers(tokens).length > 0;
-  if (!hasProviders) {
+  if (configuredProviders.length === 0) {
     return {
       kind: "empty",
       provider,
@@ -26,7 +19,20 @@ export async function fetchUsageResult(provider: ProviderName): Promise<UsageRes
     };
   }
 
-  if (!isProviderConfigured(tokens, provider)) {
+  if (provider !== ALL_PROVIDERS_SCOPE && !getProviderById(provider)) {
+    return {
+      kind: "error",
+      provider,
+      message: `Unknown provider: ${provider}`,
+    };
+  }
+
+  const selectedProviders =
+    provider === ALL_PROVIDERS_SCOPE
+      ? configuredProviders
+      : configuredProviders.filter((definition) => definition.id === provider);
+
+  if (selectedProviders.length === 0) {
     return {
       kind: "error",
       provider,
@@ -34,7 +40,7 @@ export async function fetchUsageResult(provider: ProviderName): Promise<UsageRes
     };
   }
 
-  const usageData = await fetchUsageData(tokens, provider);
+  const usageData = await fetchUsageData(rawAuth!, selectedProviders);
 
   if (usageData.length === 0) {
     return {
@@ -51,27 +57,18 @@ export async function fetchUsageResult(provider: ProviderName): Promise<UsageRes
   };
 }
 
-function isProviderConfigured(tokens: AuthTokens, provider: ProviderName): boolean {
-  if (provider === "all") {
-    return getProviderFetchers(tokens).length > 0;
-  }
-
-  return getProviderFetchers(tokens).some((fetcher) => fetcher.provider === provider);
-}
-
 async function fetchUsageData(
-  tokens: AuthTokens,
-  provider: ProviderName,
-): Promise<UsageData[]> {
-  const fetchers = getProviderFetchers(tokens).filter(
-    (fetcher) => provider === "all" || fetcher.provider === provider,
+  rawAuth: NonNullable<Awaited<ReturnType<typeof getRawAuthJson>>>,
+  providers: UsageProviderDefinition[],
+): Promise<UsageCard[]> {
+  const results: UsageCard[] = [];
+  const settled = await Promise.allSettled(
+    providers.map((definition) => definition.fetchFromRawAuth(rawAuth)),
   );
-  const results: UsageData[] = [];
-  const settled = await Promise.allSettled(fetchers.map((fetcher) => fetcher.request()));
 
   for (const [index, result] of settled.entries()) {
-    const providerInfo = fetchers[index];
-    if (!providerInfo) {
+    const definition = providers[index];
+    if (!definition) {
       continue;
     }
 
@@ -81,44 +78,12 @@ async function fetchUsageData(
     }
 
     results.push({
-      provider: providerInfo.name,
+      providerId: definition.id,
+      provider: definition.label,
       windows: [],
       error: result.reason instanceof Error ? result.reason.message : "Unknown error",
     });
   }
 
   return results;
-}
-
-type ProviderFetcher = {
-  provider: ConcreteProviderName;
-  name: string;
-  request: () => Promise<UsageData[]>;
-};
-
-function getProviderFetchers(tokens: AuthTokens): ProviderFetcher[] {
-  const openAIAuth = tokens.openai;
-  const copilotAccessToken = tokens.copilot?.accessToken;
-
-  const fetchers: Partial<Record<ConcreteProviderName, ProviderFetcher>> = {
-    openai: openAIAuth
-      ? {
-          provider: "openai",
-          name: PROVIDER_METADATA.openai.label,
-          request: () => fetchOpenAIUsage(openAIAuth),
-        }
-      : undefined,
-    copilot: copilotAccessToken
-      ? {
-          provider: "copilot",
-          name: PROVIDER_METADATA.copilot.label,
-          request: () => fetchCopilotUsage(copilotAccessToken).then((usage) => [usage]),
-        }
-      : undefined,
-  };
-
-  return PROVIDER_ORDER.flatMap((provider) => {
-    const fetcher = fetchers[provider];
-    return fetcher ? [fetcher] : [];
-  });
 }

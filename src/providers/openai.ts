@@ -5,12 +5,25 @@
  * OpenAI API key mode does not expose the same subscription usage windows.
  */
 
-import type { OpenAIAuth } from "../utils/auth.ts";
-import type { UsageData } from "../utils/format.ts";
+import type { UsageCard, UsageProviderDefinition } from "../types.ts";
+import type { RawAuthJson, RawAuthJsonProvider } from "../utils/auth.ts";
 import { formatRelativeTime } from "../utils/format.ts";
 
 const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
 const OPENAI_PROVIDER_NAME = "OpenAI/Codex";
+
+interface OpenAIChatGPTAuth {
+  mode: "chatgpt";
+  accessToken: string;
+  accountId?: string;
+}
+
+interface OpenAIApiKeyAuth {
+  mode: "api";
+  apiKey: string;
+}
+
+type OpenAIAuth = OpenAIChatGPTAuth | OpenAIApiKeyAuth;
 
 interface RateLimitWindow {
   used_percent: number;
@@ -43,10 +56,11 @@ interface CodexUsageResponse {
   };
 }
 
-export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
+async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
   if (auth.mode === "api") {
     return [
       {
+        providerId: openAIProvider.id,
         provider: OPENAI_PROVIDER_NAME,
         planType: "API key",
         windows: [],
@@ -78,6 +92,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
     if (response.status === 401) {
       return [
         {
+          providerId: openAIProvider.id,
           provider: OPENAI_PROVIDER_NAME,
           windows: [],
           error: "Token expired or invalid",
@@ -88,6 +103,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
     if (response.status === 403) {
       return [
         {
+          providerId: openAIProvider.id,
           provider: OPENAI_PROVIDER_NAME,
           windows: [],
           error: "Access denied (account ID may be required)",
@@ -98,6 +114,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
     if (!response.ok) {
       return [
         {
+          providerId: openAIProvider.id,
           provider: OPENAI_PROVIDER_NAME,
           windows: [],
           error: `HTTP ${response.status}`,
@@ -107,7 +124,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
 
     const data = (await response.json()) as CodexUsageResponse;
     const planType = formatPlanType(data.plan_type);
-    const usageCards: UsageData[] = [];
+    const usageCards: UsageCard[] = [];
     const seenProviders = new Set<string>();
 
     const primaryCard = buildRateLimitCard({
@@ -142,6 +159,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
 
     return [
       {
+        providerId: openAIProvider.id,
         provider: OPENAI_PROVIDER_NAME,
         planType,
         windows: [],
@@ -150,6 +168,7 @@ export async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageData[]> {
   } catch (error) {
     return [
       {
+        providerId: openAIProvider.id,
         provider: OPENAI_PROVIDER_NAME,
         windows: [],
         error: error instanceof Error ? error.message : "Unknown error",
@@ -164,7 +183,7 @@ function buildRateLimitCard(input: {
   rateLimit?: RateLimitBlock;
   credits?: CodexUsageResponse["credits"];
   includePlanTypeOnly?: boolean;
-}): UsageData | null {
+}): UsageCard | null {
   const windows = collectWindows(input.rateLimit);
   const extra = buildCreditsExtra(input.credits);
 
@@ -177,6 +196,7 @@ function buildRateLimitCard(input: {
   }
 
   return {
+    providerId: openAIProvider.id,
     provider: input.provider,
     planType: input.planType,
     windows,
@@ -184,12 +204,12 @@ function buildRateLimitCard(input: {
   };
 }
 
-function collectWindows(rateLimit?: RateLimitBlock): UsageData["windows"] {
+function collectWindows(rateLimit?: RateLimitBlock): UsageCard["windows"] {
   if (!rateLimit) {
     return [];
   }
 
-  const windows: UsageData["windows"] = [];
+  const windows: UsageCard["windows"] = [];
   const primaryWindow = rateLimit.primary_window;
   const secondaryWindow = rateLimit.secondary_window;
 
@@ -224,6 +244,8 @@ function toUsageWindow(key: string, window: RateLimitWindow) {
     label: getWindowLabel(key, window),
     usedPercent: window.used_percent,
     resetTime: resetDate ? formatRelativeTime(resetDate) : undefined,
+    source: "endpoint" as const,
+    rawResetAt: resetDate?.toISOString(),
   };
 }
 
@@ -243,7 +265,7 @@ function buildCreditsExtra(credits?: CodexUsageResponse["credits"]): Record<stri
   return Object.keys(extra).length > 0 ? extra : undefined;
 }
 
-function pushUniqueCard(results: UsageData[], seenProviders: Set<string>, card: UsageData | null): void {
+function pushUniqueCard(results: UsageCard[], seenProviders: Set<string>, card: UsageCard | null): void {
   if (!card || seenProviders.has(card.provider)) {
     return;
   }
@@ -347,3 +369,65 @@ function isRateLimitWindow(value: unknown): value is RateLimitWindow {
       typeof (value as { used_percent?: unknown }).used_percent === "number",
   );
 }
+
+function normalizeAuthType(type?: string): string | undefined {
+  const normalized = type?.trim().toLowerCase();
+  return normalized && normalized.length > 0 ? normalized : undefined;
+}
+
+function getStringValue(provider: RawAuthJsonProvider | undefined, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = provider?.[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveOpenAIAuth(rawAuth: RawAuthJson): OpenAIAuth | undefined {
+  const openai = rawAuth["openai"] ?? rawAuth["chatgpt"];
+  if (!openai) {
+    return undefined;
+  }
+
+  const authType = normalizeAuthType(typeof openai.type === "string" ? openai.type : undefined);
+  const accessToken = getStringValue(openai, "access", "accessToken", "token");
+  const apiKey = getStringValue(openai, "key");
+  const accountId = getStringValue(openai, "accountId");
+
+  if (authType === "api" && apiKey) {
+    return { mode: "api", apiKey };
+  }
+
+  if (accessToken) {
+    return {
+      mode: "chatgpt",
+      accessToken,
+      accountId,
+    };
+  }
+
+  if (apiKey) {
+    return { mode: "api", apiKey };
+  }
+
+  return undefined;
+}
+
+export const openAIProvider = {
+  id: "openai",
+  label: OPENAI_PROVIDER_NAME,
+  commandTitle: "Usage OpenAI",
+  order: 10,
+  resolveAuth: resolveOpenAIAuth,
+  fetchFromRawAuth: async (rawAuth) => {
+    const auth = resolveOpenAIAuth(rawAuth);
+    if (!auth) {
+      throw new Error("Provider not configured");
+    }
+
+    return fetchOpenAIUsage(auth);
+  },
+} as const satisfies UsageProviderDefinition;

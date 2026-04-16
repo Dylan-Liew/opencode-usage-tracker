@@ -6,39 +6,12 @@ import { readFile } from "fs/promises";
 import { homedir } from "os";
 import { join } from "path";
 
-export interface AuthTokens {
-  copilot?: {
-    accessToken: string;
-  };
-  openai?: OpenAIAuth;
+export interface RawAuthJsonProvider {
+  [key: string]: unknown;
 }
 
-export type OpenAIAuth = OpenAIChatGPTAuth | OpenAIApiKeyAuth;
-
-export interface OpenAIChatGPTAuth {
-  mode: "chatgpt";
-  accessToken: string;
-  accountId?: string;
-}
-
-export interface OpenAIApiKeyAuth {
-  mode: "api";
-  apiKey: string;
-}
-
-interface AuthJsonProvider {
-  type?: string;
-  access?: string;
-  key?: string;
-  accountId?: string;
-  accessToken?: string;
-  token?: string;
-  groupId?: string;
-  group_id?: string;
-}
-
-interface AuthJson {
-  [key: string]: AuthJsonProvider | undefined;
+export interface RawAuthJson {
+  [key: string]: RawAuthJsonProvider | undefined;
 }
 
 /**
@@ -65,72 +38,17 @@ function getAuthJsonPaths(): string[] {
 /**
  * Read and parse auth.json from the first available path
  */
-async function readAuthJson(): Promise<AuthJson | null> {
+export async function getRawAuthJson(): Promise<RawAuthJson | null> {
   const paths = getAuthJsonPaths();
   
   for (const path of paths) {
     try {
       const content = await readFile(path, "utf-8");
-      return JSON.parse(content) as AuthJson;
+      return JSON.parse(content) as RawAuthJson;
     } catch {
       continue;
     }
   }
   
   return null;
-}
-
-/**
- * Get authentication tokens for all supported providers
- */
-export async function getAuthTokens(): Promise<AuthTokens> {
-  const authJson = await readAuthJson();
-  
-  if (!authJson) {
-    return {};
-  }
-  
-  const tokens: AuthTokens = {};
-  
-  // GitHub Copilot
-  const copilot = authJson["copilot"] || authJson["github-copilot"];
-  if (copilot) {
-    const accessToken = copilot.access || copilot.accessToken || copilot.token;
-    if (accessToken) {
-      tokens.copilot = { accessToken };
-    }
-  }
-  
-  // OpenAI / Codex
-  const openai = authJson["openai"] || authJson["chatgpt"];
-  if (openai) {
-    const authType = normalizeAuthType(openai.type);
-    const accessToken = openai.access || openai.accessToken || openai.token;
-    const apiKey = typeof openai.key === "string" ? openai.key.trim() : "";
-
-    if (authType === "api" && apiKey) {
-      tokens.openai = {
-        mode: "api",
-        apiKey,
-      };
-    } else if (accessToken) {
-      tokens.openai = {
-        mode: "chatgpt",
-        accessToken,
-        accountId: openai.accountId,
-      };
-    } else if (apiKey) {
-      tokens.openai = {
-        mode: "api",
-        apiKey,
-      };
-    }
-  }
-
-  return tokens;
-}
-
-function normalizeAuthType(type?: string): string | undefined {
-  const normalized = type?.trim().toLowerCase();
-  return normalized && normalized.length > 0 ? normalized : undefined;
 }

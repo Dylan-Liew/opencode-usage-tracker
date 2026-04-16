@@ -4,22 +4,25 @@ import { useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import { createEffect, For, Show } from "solid-js";
 import {
-  PROVIDER_COMMANDS,
-  PROVIDER_OPTIONS,
-  PROVIDER_LABELS,
-  getProviderLabel,
+  ALL_PROVIDERS_SCOPE,
   USAGE_COMMAND_SHOW,
   USAGE_COMMAND_OPEN_PICKER,
   USAGE_COMMAND_OPEN_ALL,
-  type ProviderName,
 } from "./constants.ts";
-import { fetchUsageResult, type UsageResult } from "./usage.ts";
-import type { UsageData, UsageWindow } from "./utils/format.ts";
+import {
+  getProviderCommands,
+  getProviderScopeOptions,
+  getProviderScopeLabelFromValue,
+  isProviderScope,
+  type ProviderScope,
+} from "./providers/index.ts";
+import { fetchUsageResult } from "./usage.ts";
+import type { UsageCard, UsageResult, UsageWindow } from "./types.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
 const BAR_WIDTH = 24;
 
-const PICKER_OPTIONS = [{ title: PROVIDER_LABELS.all, value: "all" as const }, ...PROVIDER_OPTIONS];
+const PICKER_OPTIONS = getProviderScopeOptions();
 
 function usageColor(api: TuiPluginApi, percent: number) {
   if (percent >= 90) return api.theme.current.error;
@@ -27,7 +30,7 @@ function usageColor(api: TuiPluginApi, percent: number) {
   return api.theme.current.primary;
 }
 
-function metaRows(provider: UsageData): Array<{ label: string; value: string }> {
+function metaRows(provider: UsageCard): Array<{ label: string; value: string }> {
   const rows: Array<{ label: string; value: string }> = [];
 
   for (const window of provider.windows) {
@@ -72,7 +75,7 @@ function UsageBar(props: { api: TuiPluginApi; window: UsageWindow }) {
   );
 }
 
-function ProviderCard(props: { api: TuiPluginApi; provider: UsageData }) {
+function ProviderCard(props: { api: TuiPluginApi; provider: UsageCard }) {
   const theme = props.api.theme.current;
   const rows = metaRows(props.provider);
   const lastWindowIndex = props.provider.windows.length - 1;
@@ -158,7 +161,7 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               Usage Tracker
             </text>
-            <text fg={theme.textMuted}>{getProviderLabel(props.result.provider)}</text>
+            <text fg={theme.textMuted}>{getProviderScopeLabelFromValue(props.result.provider)}</text>
           </box>
           <text fg={theme.textMuted} onMouseUp={() => props.api.ui.dialog.clear()}>
             esc
@@ -196,19 +199,29 @@ function openResultDialog(api: TuiPluginApi, result: UsageResult): void {
 function openPicker(api: TuiPluginApi): void {
   const DialogSelect = api.ui.DialogSelect;
   api.ui.dialog.replace(() => (
-      <DialogSelect
-        title="Usage"
-        placeholder="Choose provider"
-        options={PICKER_OPTIONS}
-        onSelect={(option) => {
-          api.ui.dialog.clear();
-          void openUsage(api, option.value as ProviderName);
-        }}
-      />
+    <DialogSelect
+      title="Usage"
+      placeholder="Choose provider"
+      options={PICKER_OPTIONS}
+      onSelect={(option) => {
+        api.ui.dialog.clear();
+
+        if (!isProviderScope(option.value)) {
+          api.ui.toast({
+            message: `Unknown provider: ${option.value}`,
+            variant: "error",
+            duration: 2500,
+          });
+          return;
+        }
+
+        void openUsage(api, option.value);
+      }}
+    />
   ));
 }
 
-async function openUsage(api: TuiPluginApi, provider: ProviderName): Promise<void> {
+async function openUsage(api: TuiPluginApi, provider: ProviderScope): Promise<void> {
   api.ui.toast({
     message: "Fetching usage data...",
     variant: "info",
@@ -244,7 +257,7 @@ const tui: TuiPlugin = async (api) => {
       category: "Plugin",
       hidden: true,
       onSelect: () => {
-        void openUsage(api, "all");
+        void openUsage(api, ALL_PROVIDERS_SCOPE);
       },
     },
     {
@@ -256,7 +269,7 @@ const tui: TuiPlugin = async (api) => {
         openPicker(api);
       },
     },
-    ...PROVIDER_COMMANDS.map(({ provider, title, value }) => ({
+    ...getProviderCommands().map(({ provider, title, value }) => ({
       title,
       value,
       category: "Plugin" as const,
