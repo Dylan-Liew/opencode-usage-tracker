@@ -1,1 +1,1 @@
-export { UsageTrackerPlugin } from "./src/plugin.ts";
+export { UsageTrackerPlugin } from "./src/server.ts";

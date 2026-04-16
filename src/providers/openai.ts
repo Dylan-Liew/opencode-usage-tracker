@@ -7,10 +7,12 @@
 
 import type { UsageCard, UsageProviderDefinition } from "../types.ts";
 import type { RawAuthJson, RawAuthJsonProvider } from "../utils/auth.ts";
+import { fetchJsonResponseWithTimeout, getFetchErrorMessage } from "../utils/http.ts";
 import { formatRelativeTime } from "../utils/format.ts";
 
 const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage";
 const OPENAI_PROVIDER_NAME = "OpenAI/Codex";
+const OPENAI_USAGE_TIMEOUT_MS = 5000;
 
 interface OpenAIChatGPTAuth {
   mode: "chatgpt";
@@ -56,6 +58,11 @@ interface CodexUsageResponse {
   };
 }
 
+type OpenAILimitCard = {
+  order: number;
+  card: UsageCard | null;
+};
+
 async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
   if (auth.mode === "api") {
     return [
@@ -84,10 +91,14 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       headers["ChatGPT-Account-Id"] = auth.accountId;
     }
 
-    const response = await fetch(CODEX_USAGE_ENDPOINT, {
-      method: "GET",
-      headers,
-    });
+    const { response, data } = await fetchJsonResponseWithTimeout<CodexUsageResponse>(
+      CODEX_USAGE_ENDPOINT,
+      {
+        method: "GET",
+        headers,
+      },
+      OPENAI_USAGE_TIMEOUT_MS,
+    );
 
     if (response.status === 401) {
       return [
@@ -122,39 +133,56 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
       ];
     }
 
-    const data = (await response.json()) as CodexUsageResponse;
+    if (!data) {
+      return [
+        {
+          providerId: openAIProvider.id,
+          provider: OPENAI_PROVIDER_NAME,
+          windows: [],
+          error: "Usage response was empty",
+        },
+      ];
+    }
+
     const planType = formatPlanType(data.plan_type);
-    const usageCards: UsageCard[] = [];
+    const usageCards: OpenAILimitCard[] = [];
     const seenProviders = new Set<string>();
 
     const primaryCard = buildRateLimitCard({
-      provider: OPENAI_PROVIDER_NAME,
+      provider: `${OPENAI_PROVIDER_NAME} - Primary quota`,
+      description: "Main OpenAI/Codex quota.",
       planType,
       rateLimit: data.rate_limit,
-      credits: data.credits,
-      includePlanTypeOnly: true,
     });
-    pushUniqueCard(usageCards, seenProviders, primaryCard);
+    pushUniqueCard(usageCards, seenProviders, 10, primaryCard);
 
     const codeReviewCard = buildRateLimitCard({
       provider: `${OPENAI_PROVIDER_NAME} - Code review`,
+      description: "Separate code review quota.",
       planType,
       rateLimit: data.code_review_rate_limit,
     });
-    pushUniqueCard(usageCards, seenProviders, codeReviewCard);
+    pushUniqueCard(usageCards, seenProviders, 30, codeReviewCard);
 
-    for (const additionalLimit of data.additional_rate_limits ?? []) {
-      const provider = getAdditionalLimitProviderName(additionalLimit);
+    for (const [index, additionalLimit] of (data.additional_rate_limits ?? []).entries()) {
+      const meta = getAdditionalLimitCardMeta(additionalLimit);
       const additionalCard = buildRateLimitCard({
-        provider,
+        provider: meta.provider,
+        description: meta.description,
         planType,
         rateLimit: additionalLimit.rate_limit,
       });
-      pushUniqueCard(usageCards, seenProviders, additionalCard);
+      pushUniqueCard(usageCards, seenProviders, meta.order ?? 40 + index, additionalCard);
     }
 
+    const creditsCard = buildCreditsCard(data.credits, planType);
+    pushUniqueCard(usageCards, seenProviders, 90, creditsCard);
+
     if (usageCards.length > 0) {
-      return usageCards;
+      return usageCards
+        .sort((left, right) => left.order - right.order)
+        .map((entry) => entry.card)
+        .filter(isUsageCard);
     }
 
     return [
@@ -171,7 +199,7 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
         providerId: openAIProvider.id,
         provider: OPENAI_PROVIDER_NAME,
         windows: [],
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: getFetchErrorMessage(error),
       },
     ];
   }
@@ -179,27 +207,47 @@ async function fetchOpenAIUsage(auth: OpenAIAuth): Promise<UsageCard[]> {
 
 function buildRateLimitCard(input: {
   provider: string;
+  description?: string;
   planType?: string;
   rateLimit?: RateLimitBlock;
-  credits?: CodexUsageResponse["credits"];
-  includePlanTypeOnly?: boolean;
 }): UsageCard | null {
   const windows = collectWindows(input.rateLimit);
-  const extra = buildCreditsExtra(input.credits);
 
-  if (windows.length === 0 && !extra && !input.includePlanTypeOnly) {
-    return null;
-  }
-
-  if (!input.planType && windows.length === 0 && !extra) {
+  if (windows.length === 0) {
     return null;
   }
 
   return {
     providerId: openAIProvider.id,
     provider: input.provider,
+    description: input.description,
     planType: input.planType,
     windows,
+  };
+}
+
+function buildCreditsCard(credits?: CodexUsageResponse["credits"], planType?: string): UsageCard | null {
+  if (!credits) {
+    return null;
+  }
+
+  const extra: Record<string, string> = {};
+  if (credits.unlimited) {
+    extra.Remaining = "Unlimited";
+  } else if (typeof credits.balance === "string") {
+    extra.Remaining = credits.balance;
+  }
+
+  if (Object.keys(extra).length === 0) {
+    return null;
+  }
+
+  return {
+    providerId: openAIProvider.id,
+    provider: `${OPENAI_PROVIDER_NAME} - Credits`,
+    description: "Credits can be used beyond your included plan quota.",
+    planType,
+    windows: [],
     extra,
   };
 }
@@ -249,34 +297,34 @@ function toUsageWindow(key: string, window: RateLimitWindow) {
   };
 }
 
-function buildCreditsExtra(credits?: CodexUsageResponse["credits"]): Record<string, string> | undefined {
-  if (!credits) {
-    return undefined;
-  }
-
-  const extra: Record<string, string> = {};
-
-  if (credits.unlimited) {
-    extra["Credits remaining"] = "Unlimited";
-  } else if (typeof credits.balance === "string") {
-    extra["Credits remaining"] = credits.balance;
-  }
-
-  return Object.keys(extra).length > 0 ? extra : undefined;
-}
-
-function pushUniqueCard(results: UsageCard[], seenProviders: Set<string>, card: UsageCard | null): void {
+function pushUniqueCard(results: OpenAILimitCard[], seenProviders: Set<string>, order: number, card: UsageCard | null): void {
   if (!card || seenProviders.has(card.provider)) {
     return;
   }
 
   seenProviders.add(card.provider);
-  results.push(card);
+  results.push({ order, card });
 }
 
-function getAdditionalLimitProviderName(limit: AdditionalRateLimit): string {
+function getAdditionalLimitCardMeta(limit: AdditionalRateLimit): {
+  provider: string;
+  description?: string;
+  order?: number;
+} {
   const rawName = limit.limit_name || limit.metered_feature || "additional_limit";
-  return `${OPENAI_PROVIDER_NAME} - ${humanizeAdditionalLimitName(rawName)}`;
+  const humanizedName = humanizeAdditionalLimitName(rawName);
+
+  if (isSparkLimitName(rawName)) {
+    return {
+      provider: `${OPENAI_PROVIDER_NAME} - ${humanizedName}`,
+      description: "Separate Spark quota.",
+      order: 20,
+    };
+  }
+
+  return {
+    provider: `${OPENAI_PROVIDER_NAME} - ${humanizedName}`,
+  };
 }
 
 function getWindowLabel(key: string, window: RateLimitWindow): string {
@@ -359,6 +407,14 @@ function humanizeAdditionalLimitName(value: string): string {
   }
 
   return humanizeLabel(normalized);
+}
+
+function isSparkLimitName(value: string): boolean {
+  return /(^|[\s_-])spark$/i.test(value.trim()) || /codex[\s_-]*spark/i.test(value);
+}
+
+function isUsageCard(value: UsageCard | null): value is UsageCard {
+  return value !== null;
 }
 
 function isRateLimitWindow(value: unknown): value is RateLimitWindow {

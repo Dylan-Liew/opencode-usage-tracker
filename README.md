@@ -1,24 +1,32 @@
 # OpenCode Usage Tracker
 
-A plugin for [OpenCode](https://opencode.ai) that shows provider usage in a TUI dialog.
+Track provider usage inside OpenCode with a native TUI dialog.
 
 ## Supported Providers
 
-| Provider | Auth Type | Usage Data |
-|----------|-----------|------------|
-| GitHub Copilot | OAuth | Premium requests quota, reset date |
-| OpenAI/Codex | ChatGPT login or API key | ChatGPT login: 5-hour & weekly limits, credits; API key: informational only |
-| MiniMax Coding Plan *(experimental)* | API key (`minimax-coding-plan.key`) | coding plan quota windows from `model_remains` |
+Only the providers below are currently supported in this repo.
+
+| Provider | Auth | Usage shown |
+| --- | --- | --- |
+| OpenAI/Codex | ChatGPT login or API key | ChatGPT login: primary quota, Spark quota when present, code review quota, credits. API key: informational card only. |
+| GitHub Copilot | OAuth token from OpenCode auth | Premium/chat quota snapshots, remaining usage, reset time. |
 
 ## Installation
 
-Recommended: install with the OpenCode plugin installer so both the server and TUI targets are configured:
+### Automatic install from npm
+
+Recommended:
 
 ```bash
 opencode plugin opencode-usage-tracker
 ```
 
-If you want to configure it manually, add the package to both configs:
+This installs the npm package and wires it into OpenCode.
+
+### Manual install from npm
+
+Add the npm package name to both configs so the TUI plugin and the server bridge
+are both loaded.
 
 `opencode.json`
 
@@ -38,46 +46,148 @@ If you want to configure it manually, add the package to both configs:
 }
 ```
 
-The TUI dialog will not load if the package is only present in `opencode.json`.
-
 ## Usage
 
-Open the usage dialog from either:
+Open the tracker with either:
 
-- `/usage` in chat
-- Command palette (`Ctrl+P`) -> `Usage`
+- `/usage`
+- Command palette → `Usage`
 
-Both entry points open the provider picker dialog.
+Behavior depends on how many supported providers are configured in your
+OpenCode `auth.json`:
 
-Supported slash command:
-
-```
-/usage          # Open provider picker
-```
-
-### Example Output
-
-The dialog displays a native TUI usage view for the selected provider scope.
+- 0 configured: show the empty-state message
+- 1 configured: open that provider directly
+- 2+ configured: show the provider picker
 
 ## Authentication
 
-The plugin reads authentication tokens from OpenCode's `auth.json` file located at:
+The plugin reads credentials from OpenCode's `auth.json`.
+
 - Linux: `~/.local/share/opencode/auth.json`
 - macOS: `~/Library/Application Support/opencode/auth.json`
 
-Tokens are automatically populated when you authenticate with providers in OpenCode.
+OpenCode populates this file when you connect providers through its normal auth
+flow.
 
-MiniMax support is experimental and uses the `minimax-coding-plan.key` field in `auth.json` when present.
+### OpenAI/Codex modes
 
-### OpenAI/Codex auth modes
+- **ChatGPT login**: fetches Codex usage from `https://chatgpt.com/backend-api/wham/usage`
+- **API key**: shows an informational card only, because ChatGPT subscription
+  quota data does not apply to direct API-key usage
 
-- **ChatGPT login**: the plugin reads the ChatGPT access token from `auth.json` and fetches Codex usage from `https://chatgpt.com/backend-api/wham/usage`
-- **API key**: the plugin detects manual OpenAI API-key auth and shows an informational card instead of a quota percentage, because the ChatGPT subscription usage endpoint does not apply in API-key mode
+## Adding More Providers
+
+The plugin is now registry-driven. To add a provider, you should only need:
+
+1. a new provider module in `src/providers/`
+2. one registration entry in `src/providers/index.ts`
+
+You should **not** need to change `src/tui.tsx` or `src/usage.ts` for a normal
+new provider.
+
+### Step 1: Create a provider module
+
+Add a new file such as `src/providers/example.ts`.
+
+Each provider exports a definition that satisfies `UsageProviderDefinition`.
+
+```ts
+import type { UsageCard, UsageProviderDefinition } from "../types.ts";
+import type { RawAuthJson } from "../utils/auth.ts";
+
+type ExampleAuth = {
+  apiKey: string;
+};
+
+function resolveExampleAuth(rawAuth: RawAuthJson): ExampleAuth | undefined {
+  const example = rawAuth["example"];
+  if (!example) {
+    return undefined;
+  }
+
+  const apiKey = typeof example.key === "string" ? example.key.trim() : "";
+  return apiKey ? { apiKey } : undefined;
+}
+
+async function fetchExampleUsage(auth: ExampleAuth): Promise<UsageCard[]> {
+  return [
+    {
+      providerId: exampleProvider.id,
+      provider: "Example Provider",
+      planType: "Pro",
+      windows: [
+        {
+          label: "Monthly",
+          usedPercent: 42,
+        },
+      ],
+    },
+  ];
+}
+
+export const exampleProvider = {
+  id: "example",
+  label: "Example Provider",
+  commandTitle: "Usage Example",
+  order: 30,
+  resolveAuth: resolveExampleAuth,
+  fetchFromRawAuth: async (rawAuth) => {
+    const auth = resolveExampleAuth(rawAuth);
+    if (!auth) {
+      throw new Error("Provider not configured");
+    }
+
+    return fetchExampleUsage(auth);
+  },
+} as const satisfies UsageProviderDefinition;
+```
+
+### Step 2: Register the provider
+
+Import it in `src/providers/index.ts` and add it to `REGISTERED_PROVIDERS`.
+
+```ts
+import { exampleProvider } from "./example.ts";
+
+const REGISTERED_PROVIDERS = [openAIProvider, copilotProvider, exampleProvider] as const;
+```
+
+The registry then handles:
+
+- picker entries
+- hidden command generation
+- provider label lookup
+- display order via `order`
+- configured-provider filtering
+
+### Step 3: Return clear cards
+
+Each provider should return `UsageCard[]` shaped for display.
+
+Useful fields:
+
+- `provider`: card title
+- `description`: short muted subtitle under the title
+- `planType`: right-aligned plan label
+- `windows`: progress bars shown in the card
+- `extra`: key-value rows under the bars
+- `error`: provider-specific failure message
+
+### Step 4: Verify
+
+Run:
+
+```bash
+bun run test
+```
+
+Then test `/usage` in OpenCode with the provider configured in `auth.json`.
 
 ## Notes
 
-- **Read-only**: This plugin only fetches usage data - it does not consume any quota
-- **Fresh Data**: Usage data is fetched fresh on each command (no caching)
+- Read-only: the plugin only fetches usage data
+- No cache: usage is fetched fresh each time
 
 ## License
 

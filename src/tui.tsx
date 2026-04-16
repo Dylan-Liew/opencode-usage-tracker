@@ -6,21 +6,20 @@ import { createEffect, For, Show } from "solid-js";
 import {
   ALL_PROVIDERS_SCOPE,
   getProviderCommands,
-  getProviderScopeOptions,
+  getConfiguredProviderScopeOptions,
   getProviderScopeLabelFromValue,
   isProviderScope,
   type ProviderScope,
 } from "./providers/index.ts";
 import { fetchUsageResult } from "./usage.ts";
 import type { UsageCard, UsageResult, UsageWindow } from "./types.ts";
+import { getRawAuthJson } from "./utils/auth.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
 const BAR_WIDTH = 24;
 const USAGE_COMMAND_SHOW = "plugin.usage.show";
 const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
 const USAGE_COMMAND_OPEN_ALL = "plugin.usage.open.all";
-
-const PICKER_OPTIONS = getProviderScopeOptions();
 
 function usageColor(api: TuiPluginApi, percent: number) {
   if (percent >= 90) return api.theme.current.error;
@@ -91,9 +90,14 @@ function ProviderCard(props: { api: TuiPluginApi; provider: UsageCard }) {
       borderStyle="rounded"
     >
       <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
-        <text fg={theme.text} attributes={TextAttributes.BOLD}>
-          {props.provider.provider}
-        </text>
+        <box flexDirection="column" gap={0}>
+          <text fg={theme.text} attributes={TextAttributes.BOLD}>
+            {props.provider.provider}
+          </text>
+          <Show when={props.provider.description}>
+            <text fg={theme.textMuted}>{props.provider.description}</text>
+          </Show>
+        </box>
         <Show when={props.provider.planType}>
           <text fg={theme.textMuted}>{props.provider.planType}</text>
         </Show>
@@ -194,13 +198,31 @@ function openResultDialog(api: TuiPluginApi, result: UsageResult): void {
   api.ui.dialog.replace(() => <UsageDialog api={api} result={result} />);
 }
 
-function openPicker(api: TuiPluginApi): void {
+async function openPicker(api: TuiPluginApi): Promise<void> {
+  const rawAuth = await getRawAuthJson();
+  const options = rawAuth ? getConfiguredProviderScopeOptions(rawAuth) : [];
+
+  if (options.length === 0) {
+    await openUsage(api, ALL_PROVIDERS_SCOPE);
+    return;
+  }
+
+  if (options.length === 1) {
+    const onlyOption = options[0];
+    if (!onlyOption) {
+      return;
+    }
+
+    await openUsage(api, onlyOption.value);
+    return;
+  }
+
   const DialogSelect = api.ui.DialogSelect;
   api.ui.dialog.replace(() => (
     <DialogSelect
       title="Usage"
       placeholder="Choose provider"
-      options={PICKER_OPTIONS}
+      options={options}
       onSelect={(option) => {
         api.ui.dialog.clear();
 
@@ -246,7 +268,7 @@ const tui: TuiPlugin = async (api) => {
       category: "Plugin",
       slash: { name: "usage" },
       onSelect: () => {
-        openPicker(api);
+        void openPicker(api);
       },
     },
     {
@@ -264,7 +286,7 @@ const tui: TuiPlugin = async (api) => {
       category: "Plugin",
       hidden: true,
       onSelect: () => {
-        openPicker(api);
+        void openPicker(api);
       },
     },
     ...getProviderCommands().map(({ provider, title, value }) => ({

@@ -15,6 +15,7 @@ export interface UsageWindow {
 export interface UsageCard {
   providerId?: string;
   provider: string;
+  description?: string;
   planType?: string;
   windows: UsageWindow[];
   extra?: Record<string, string>;

@@ -72,18 +72,21 @@ export function getConfiguredProviders(rawAuth: RawAuthJson): Array<(typeof REGI
   return getProviders().filter((provider) => provider.resolveAuth(rawAuth) !== undefined);
 }
 
-export function getProviderOptions(): ProviderOption[] {
-  return getProviders().map((provider) => ({
+export function getConfiguredProviderOptions(rawAuth: RawAuthJson): ProviderOption[] {
+  return getConfiguredProviders(rawAuth).map((provider) => ({
     title: provider.label,
     value: provider.id,
   }));
 }
 
-export function getProviderScopeOptions(): ProviderScopeOption[] {
-  return [
-    { title: "All Providers", value: ALL_PROVIDERS_SCOPE },
-    ...getProviderOptions(),
-  ];
+export function getConfiguredProviderScopeOptions(rawAuth: RawAuthJson): ProviderScopeOption[] {
+  const configuredOptions = getConfiguredProviderOptions(rawAuth);
+
+  if (configuredOptions.length <= 1) {
+    return configuredOptions;
+  }
+
+  return [{ title: "All Providers", value: ALL_PROVIDERS_SCOPE }, ...configuredOptions];
 }
 
 export function getProviderCommandValue(providerId: ProviderId): string {

@@ -6,10 +6,12 @@
 
 import type { UsageCard, UsageProviderDefinition } from "../types.ts";
 import type { RawAuthJson } from "../utils/auth.ts";
+import { fetchJsonResponseWithTimeout, getFetchErrorMessage } from "../utils/http.ts";
 import { formatRelativeTime } from "../utils/format.ts";
 
 const COPILOT_USER_ENDPOINT = "https://api.github.com/copilot_internal/user";
 const COPILOT_PROVIDER_NAME = "GitHub Copilot";
+const COPILOT_USAGE_TIMEOUT_MS = 5000;
 
 interface QuotaSnapshot {
   quota_id: string;
@@ -33,16 +35,20 @@ interface CopilotUserResponse {
 
 async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
   try {
-    const response = await fetch(COPILOT_USER_ENDPOINT, {
-      method: "GET",
-      headers: {
-        Authorization: `token ${accessToken}`,
-        Accept: "application/json",
-        "Editor-Version": "vscode/1.96.2",
-        "X-Github-Api-Version": "2025-04-01",
-        "User-Agent": "opencode-usage-tracker/1.0.0",
+    const { response, data } = await fetchJsonResponseWithTimeout<CopilotUserResponse>(
+      COPILOT_USER_ENDPOINT,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `token ${accessToken}`,
+          Accept: "application/json",
+          "Editor-Version": "vscode/1.96.2",
+          "X-Github-Api-Version": "2025-04-01",
+          "User-Agent": "opencode-usage-tracker/1.0.0",
+        },
       },
-    });
+      COPILOT_USAGE_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       return [
@@ -55,7 +61,16 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
       ];
     }
 
-    const data = (await response.json()) as CopilotUserResponse;
+    if (!data) {
+      return [
+        {
+          providerId: copilotProvider.id,
+          provider: COPILOT_PROVIDER_NAME,
+          windows: [],
+          error: "Usage response was empty",
+        },
+      ];
+    }
 
     const windows: UsageCard["windows"] = [];
     const extra: Record<string, string> = {};
@@ -135,7 +150,7 @@ async function fetchCopilotUsage(accessToken: string): Promise<UsageCard[]> {
         providerId: copilotProvider.id,
         provider: COPILOT_PROVIDER_NAME,
         windows: [],
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: getFetchErrorMessage(error),
       },
     ];
   }
