@@ -34,6 +34,18 @@ interface KimiRateLimit {
 }
 
 interface KimiUsageResponse {
+  code?: string;
+  msg?: string;
+  message?: string;
+  details?: Array<{
+    debug?: {
+      reason?: string;
+      localizedMessage?: {
+        locale?: string;
+        message?: string;
+      };
+    };
+  }>;
   user?: {
     region?: string;
     businessId?: string;
@@ -165,6 +177,29 @@ function buildMainCard(input: {
   ];
 }
 
+function getKimiApiError(data: KimiUsageResponse | undefined): string | undefined {
+  const localizedMessage = data?.details
+    ?.map((detail) => detail.debug?.localizedMessage?.message)
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  if (localizedMessage) {
+    return localizedMessage.trim();
+  }
+
+  const directMessage = [data?.message, data?.msg]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0);
+
+  if (directMessage) {
+    return directMessage.trim();
+  }
+
+  if (typeof data?.code === "string" && data.code.trim().length > 0) {
+    return data.code.trim().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  return undefined;
+}
+
 async function fetchKimiUsage(auth: KimiAuth): Promise<UsageCard[]> {
   try {
     const { response, data } = await fetchJsonResponseWithTimeout<KimiUsageResponse>(
@@ -181,11 +216,11 @@ async function fetchKimiUsage(auth: KimiAuth): Promise<UsageCard[]> {
     );
 
     if (response.status === 401) {
-      return buildMainCard({ windows: [], error: "API key expired or invalid" });
+      return buildMainCard({ windows: [], error: getKimiApiError(data) ?? "API key expired or invalid" });
     }
 
     if (!response.ok) {
-      return buildMainCard({ windows: [], error: `API error: ${response.status}` });
+      return buildMainCard({ windows: [], error: getKimiApiError(data) ?? `API error: ${response.status}` });
     }
 
     if (!data) {

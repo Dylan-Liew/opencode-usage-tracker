@@ -416,7 +416,10 @@ async function fetchZaiUsage(auth: ZaiAuth): Promise<UsageCard[]> {
     });
 
     if (windows.length === 0) {
-      return buildMainCard({ windows: [], error: "No parseable quota windows were returned by Z.AI" });
+      return buildMainCard({
+        windows: [],
+        error: "No quota data returned by Z.AI. The coding plan may be inactive or expired.",
+      });
     }
 
     return buildMainCard({
