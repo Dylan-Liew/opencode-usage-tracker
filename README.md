@@ -15,7 +15,7 @@ Track provider usage inside OpenCode with a native TUI dialog through a simple `
 Recommended:
 
 ```bash
-opencode plugin opencode-usage-tracker
+opencode plugin -g opencode-usage-tracker
 ```
 
 Manual install:
