@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { RGBA, TextAttributes } from "@opentui/core";
-import { useTerminalDimensions } from "@opentui/solid";
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid";
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import {
   ALL_PROVIDERS_SCOPE,
   getProviderCommands,
@@ -132,6 +132,15 @@ function buildProviderViews(cards: UsageCard[]): UsageProviderView[] {
   }));
 }
 
+function isErroredProvider(provider: UsageProviderView): boolean {
+  const hasErrorSection = provider.sections.some((section) => Boolean(section.error));
+  const hasSuccessfulContent = provider.sections.some(
+    (section) => !section.error && (section.windows.length > 0 || section.rows.length > 0),
+  );
+
+  return hasErrorSection && !hasSuccessfulContent;
+}
+
 function isOkResult(result: UsageResult): result is Extract<UsageResult, { kind: "ok" }> {
   return result.kind === "ok";
 }
@@ -247,11 +256,52 @@ function ProviderCard(props: { api: TuiPluginApi; provider: UsageProviderView })
 function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
   const dimensions = useTerminalDimensions();
   const theme = props.api.theme.current;
+  const [showErroredProviders, setShowErroredProviders] = createSignal(false);
   const okResult = () => (isOkResult(props.result) ? props.result : undefined);
   const messageResult = () => (isMessageResult(props.result) ? props.result : undefined);
+  const isAllProvidersView = () => props.result.provider === ALL_PROVIDERS_SCOPE;
   const providerViews = createMemo(() => {
     const result = okResult();
     return result ? buildProviderViews(result.providers) : [];
+  });
+  const hiddenErroredProviders = createMemo(() => {
+    if (!isAllProvidersView()) {
+      return [] as UsageProviderView[];
+    }
+
+    return providerViews().filter(isErroredProvider);
+  });
+  const visibleProviderViews = createMemo(() => {
+    if (!isAllProvidersView() || showErroredProviders()) {
+      return providerViews();
+    }
+
+    return providerViews().filter((provider) => !isErroredProvider(provider));
+  });
+  const onlyHiddenErroredProviders = createMemo(
+    () => !showErroredProviders() && visibleProviderViews().length === 0 && hiddenErroredProviders().length > 0,
+  );
+
+  useKeyboard((event) => {
+    if (!okResult() || !isAllProvidersView()) {
+      return;
+    }
+
+    if (event.eventType !== "press" || event.repeated) {
+      return;
+    }
+
+    if (event.ctrl || event.meta || event.option || event.shift || event.name !== "h") {
+      return;
+    }
+
+    if (hiddenErroredProviders().length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setShowErroredProviders((current) => !current);
   });
 
   createEffect(() => {
@@ -283,10 +333,44 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
         </box>
       </box>
 
+      <Show when={okResult() && isAllProvidersView() && hiddenErroredProviders().length > 0 && !showErroredProviders()}>
+        <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            paddingTop={0}
+            paddingBottom={0}
+            backgroundColor={RGBA.fromInts(0, 0, 0, 0)}
+            borderColor={theme.error}
+            borderStyle="rounded"
+          >
+            <text fg={theme.error}>
+              {`${hiddenErroredProviders().length} provider(s) hidden — unable to fetch quota. Press h to show.`}
+            </text>
+          </box>
+        </box>
+      </Show>
+
+      <Show when={okResult() && isAllProvidersView() && hiddenErroredProviders().length > 0 && showErroredProviders()}>
+        <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
+          <text fg={theme.textMuted}>{`Showing ${hiddenErroredProviders().length} errored provider(s). Press h to hide.`}</text>
+        </box>
+      </Show>
+
       <scrollbox paddingLeft={4} paddingRight={4} maxHeight={Math.max(12, Math.floor(dimensions().height * 0.49))}>
         <Show when={okResult()}>
           <box flexDirection="column" gap={1}>
-            <For each={providerViews()}>{(provider) => <ProviderCard api={props.api} provider={provider} />}</For>
+            <Show when={onlyHiddenErroredProviders()}>
+              <box
+                padding={1}
+                backgroundColor={RGBA.fromInts(0, 0, 0, 0)}
+                borderColor={theme.border}
+                borderStyle="rounded"
+              >
+                <text fg={theme.textMuted}>All visible providers are hidden. Press h to show errored providers.</text>
+              </box>
+            </Show>
+            <For each={visibleProviderViews()}>{(provider) => <ProviderCard api={props.api} provider={provider} />}</For>
           </box>
         </Show>
         <Show when={messageResult()}>
