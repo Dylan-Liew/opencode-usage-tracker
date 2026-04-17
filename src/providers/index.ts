@@ -5,7 +5,10 @@
 import type { UsageProviderDefinition } from "../types.ts";
 import type { RawAuthJson } from "../utils/auth.ts";
 import { copilotProvider } from "./copilot.ts";
+import { kimiProvider } from "./kimi.ts";
+import { minimaxProvider } from "./minimax.ts";
 import { openAIProvider } from "./openai.ts";
+import { zaiProvider } from "./zai.ts";
 
 export const ALL_PROVIDERS_SCOPE = "all" as const;
 
@@ -31,7 +34,13 @@ export interface ProviderScopeOption {
  * Sorting is automatic from each provider's `order` field, but ESM still needs
  * explicit imports somewhere so the modules are part of the registry.
  */
-const REGISTERED_PROVIDERS = [openAIProvider, copilotProvider] as const satisfies readonly UsageProviderDefinition[];
+const REGISTERED_PROVIDERS = [
+  openAIProvider,
+  copilotProvider,
+  minimaxProvider,
+  kimiProvider,
+  zaiProvider,
+] as const satisfies readonly UsageProviderDefinition[];
 
 export type ProviderId = (typeof REGISTERED_PROVIDERS)[number]["id"];
 export type ProviderScope = ProviderId | typeof ALL_PROVIDERS_SCOPE;

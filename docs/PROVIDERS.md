@@ -36,6 +36,9 @@ async function fetchExampleUsage(auth: ExampleAuth): Promise<UsageCard[]> {
     {
       providerId: exampleProvider.id,
       provider: "Example Provider",
+      sectionId: "main",
+      sectionKind: "main",
+      sectionOrder: 10,
       planType: "Pro",
       windows: [
         {
@@ -89,7 +92,10 @@ Each provider should return `UsageCard[]` shaped for display.
 Useful fields:
 
 - `provider`: card title
-- `description`: short muted subtitle under the title
+- `providerId`: stable provider grouping key
+- `sectionId`: stable section key inside a provider card
+- `sectionKind`: `"main"` or `"special"`
+- `sectionOrder`: section render order
 - `planType`: right-aligned plan label
 - `windows`: progress bars shown in the card
 - `extra`: key-value rows under the bars

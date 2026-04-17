@@ -12,20 +12,20 @@ export async function fetchJsonResponseWithTimeout<T>(
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      return { response };
-    }
-
     const rawBody = await response.text();
 
     if (rawBody.trim().length === 0) {
       return { response };
     }
 
-    return {
-      response,
-      data: JSON.parse(rawBody) as T,
-    };
+    try {
+      return {
+        response,
+        data: JSON.parse(rawBody) as T,
+      };
+    } catch {
+      return { response };
+    }
   } finally {
     clearTimeout(timeout);
   }
