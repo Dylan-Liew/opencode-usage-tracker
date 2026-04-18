@@ -17,11 +17,17 @@ import { getRawAuthJson } from "./utils/auth.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
 const BAR_LABEL_WIDTH = 10;
-const BAR_TRACK_WIDTH = 28;
+const BAR_LABEL_MAX_WIDTH = 18;
 const BAR_PERCENT_WIDTH = 4;
+const BAR_TRACK_MIN_WIDTH = 12;
 const USAGE_COMMAND_SHOW = "plugin.usage.show";
 const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
 const USAGE_COMMAND_OPEN_ALL = "plugin.usage.open.all";
+
+interface UsageBarLayout {
+  trackWidth: `${number}%`;
+  trackMinWidth: number;
+}
 
 interface UsageMetaRow {
   label: string;
@@ -44,6 +50,34 @@ interface UsageProviderView {
   provider: string;
   planType?: string;
   sections: UsageSectionView[];
+}
+
+function getUsageBarLayout(terminalWidth: number): UsageBarLayout {
+  if (terminalWidth >= 128) {
+    return {
+      trackWidth: "60%",
+      trackMinWidth: 18,
+    };
+  }
+
+  if (terminalWidth >= 96) {
+    return {
+      trackWidth: "56%",
+      trackMinWidth: 16,
+    };
+  }
+
+  return {
+    trackWidth: "52%",
+    trackMinWidth: BAR_TRACK_MIN_WIDTH,
+  };
+}
+
+function getUsageBarLabelWidth(windows: UsageWindow[]): number {
+  return windows.reduce((maxWidth, window) => {
+    const nextWidth = Math.min(BAR_LABEL_MAX_WIDTH, Math.max(BAR_LABEL_WIDTH, window.label.length));
+    return Math.max(maxWidth, nextWidth);
+  }, BAR_LABEL_WIDTH);
 }
 
 function usageColor(api: TuiPluginApi, percent: number) {
@@ -149,34 +183,43 @@ function isMessageResult(result: UsageResult): result is Extract<UsageResult, { 
   return result.kind !== "ok";
 }
 
-function UsageBar(props: { api: TuiPluginApi; window: UsageWindow }) {
+function UsageBar(props: { api: TuiPluginApi; window: UsageWindow; layout: UsageBarLayout; labelWidth: number }) {
   const theme = props.api.theme.current;
-  const percent = Math.round(props.window.usedPercent);
-  const filledWidth = Math.max(0, Math.min(BAR_TRACK_WIDTH, Math.round((props.window.usedPercent / 100) * BAR_TRACK_WIDTH)));
-  const color = usageColor(props.api, props.window.usedPercent);
+  const percent = Math.max(0, Math.min(100, Math.round(props.window.usedPercent)));
+  const color = usageColor(props.api, percent);
 
   return (
-    <box flexDirection="row" alignItems="center" gap={1}>
-      <text fg={theme.text} width={BAR_LABEL_WIDTH}>
+    <box width="100%" maxWidth="100%" flexDirection="row" alignItems="center" gap={1}>
+      <text fg={theme.text} width={props.labelWidth} minWidth={BAR_LABEL_WIDTH} maxWidth={BAR_LABEL_MAX_WIDTH} flexShrink={0}>
         {props.window.label}
       </text>
-      <box width={BAR_TRACK_WIDTH} height={1} flexDirection="row" gap={0} backgroundColor={theme.backgroundElement}>
-        <Show when={filledWidth > 0}>
-          <box width={filledWidth} height={1} backgroundColor={color} />
+      <box
+        width={props.layout.trackWidth}
+        minWidth={props.layout.trackMinWidth}
+        maxWidth="100%"
+        height={1}
+        flexDirection="row"
+        flexShrink={1}
+        gap={0}
+        backgroundColor={theme.backgroundElement}
+      >
+        <Show when={percent > 0}>
+          <box width={`${percent}%`} height={1} backgroundColor={color} />
         </Show>
       </box>
-      <text fg={color} attributes={TextAttributes.BOLD} width={BAR_PERCENT_WIDTH}>
+      <text fg={color} attributes={TextAttributes.BOLD} width={BAR_PERCENT_WIDTH} minWidth={BAR_PERCENT_WIDTH} flexShrink={0}>
         {`${percent}%`.padStart(BAR_PERCENT_WIDTH, " ")}
       </text>
     </box>
   );
 }
 
-function SectionBlock(props: { api: TuiPluginApi; section: UsageSectionView }) {
+function SectionBlock(props: { api: TuiPluginApi; section: UsageSectionView; barLayout: UsageBarLayout }) {
   const theme = props.api.theme.current;
+  const labelWidth = createMemo(() => getUsageBarLabelWidth(props.section.windows));
 
   return (
-    <box flexDirection="column" gap={0}>
+    <box width="100%" maxWidth="100%" flexDirection="column" gap={0}>
       <Show when={props.section.label}>
         <box flexDirection="column" paddingBottom={1}>
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
@@ -194,8 +237,8 @@ function SectionBlock(props: { api: TuiPluginApi; section: UsageSectionView }) {
         <box flexDirection="column" gap={0}>
           <For each={props.section.windows}>
             {(window) => (
-              <box paddingBottom={1}>
-                <UsageBar api={props.api} window={window} />
+              <box width="100%" maxWidth="100%" paddingBottom={1}>
+                <UsageBar api={props.api} window={window} layout={props.barLayout} labelWidth={labelWidth()} />
               </box>
             )}
           </For>
@@ -222,11 +265,13 @@ function SectionBlock(props: { api: TuiPluginApi; section: UsageSectionView }) {
   );
 }
 
-function ProviderCard(props: { api: TuiPluginApi; provider: UsageProviderView }) {
+function ProviderCard(props: { api: TuiPluginApi; provider: UsageProviderView; barLayout: UsageBarLayout }) {
   const theme = props.api.theme.current;
 
   return (
     <box
+      width="100%"
+      maxWidth="100%"
       flexDirection="column"
       gap={0}
       paddingLeft={2}
@@ -246,8 +291,10 @@ function ProviderCard(props: { api: TuiPluginApi; provider: UsageProviderView })
         </Show>
       </box>
 
-      <box flexDirection="column" gap={1}>
-        <For each={props.provider.sections}>{(section) => <SectionBlock api={props.api} section={section} />}</For>
+      <box width="100%" maxWidth="100%" flexDirection="column" gap={1}>
+        <For each={props.provider.sections}>
+          {(section) => <SectionBlock api={props.api} section={section} barLayout={props.barLayout} />}
+        </For>
       </box>
     </box>
   );
@@ -281,6 +328,7 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
   const onlyHiddenErroredProviders = createMemo(
     () => !showErroredProviders() && visibleProviderViews().length === 0 && hiddenErroredProviders().length > 0,
   );
+  const barLayout = createMemo(() => getUsageBarLayout(dimensions().width));
 
   useKeyboard((event) => {
     if (!okResult() || !isAllProvidersView()) {
@@ -359,7 +407,7 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
 
       <scrollbox paddingLeft={4} paddingRight={4} maxHeight={Math.max(12, Math.floor(dimensions().height * 0.49))}>
         <Show when={okResult()}>
-          <box flexDirection="column" gap={1}>
+          <box width="100%" maxWidth="100%" flexDirection="column" gap={1}>
             <Show when={onlyHiddenErroredProviders()}>
               <box
                 padding={1}
@@ -370,7 +418,9 @@ function UsageDialog(props: { api: TuiPluginApi; result: UsageResult }) {
                 <text fg={theme.textMuted}>All visible providers are hidden. Press h to show errored providers.</text>
               </box>
             </Show>
-            <For each={visibleProviderViews()}>{(provider) => <ProviderCard api={props.api} provider={provider} />}</For>
+            <For each={visibleProviderViews()}>
+              {(provider) => <ProviderCard api={props.api} provider={provider} barLayout={barLayout()} />}
+            </For>
           </box>
         </Show>
         <Show when={messageResult()}>
