@@ -1,5 +1,7 @@
 # Providers
 
+This guide reflects the current provider registry structure and may evolve as provider support expands.
+
 The plugin is registry-driven. In most cases, adding a new provider only needs:
 
 1. a new provider module in `src/providers/`

@@ -1,3 +1,5 @@
+![Usage Tracker in the OpenCode TUI](./docs/images/sample.png)
+
 # OpenCode **Usage Tracker**
 
 Track provider usage inside OpenCode with a native TUI dialog through a simple `/usage` command.
@@ -20,9 +22,9 @@ opencode plugin -g opencode-usage-tracker
 
 Manual install:
 
-Add `opencode-usage-tracker` to both `opencode.json` and `tui.json`.
+For a global manual install, add `opencode-usage-tracker` to both `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`.
 
-`opencode.json`
+`~/.config/opencode/opencode.json`
 
 ```json
 {
@@ -31,7 +33,7 @@ Add `opencode-usage-tracker` to both `opencode.json` and `tui.json`.
 }
 ```
 
-`tui.json`
+`~/.config/opencode/tui.json`
 
 ```json
 {
@@ -42,7 +44,7 @@ Add `opencode-usage-tracker` to both `opencode.json` and `tui.json`.
 
 ## Try It
 
-Connect a supported provider in OpenCode, then open the tracker with either:
+Configure a supported provider in OpenCode, then open the tracker with either:
 
 - `/usage`
 - Command palette -> `Usage`
