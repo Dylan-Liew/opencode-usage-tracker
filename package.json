@@ -1,6 +1,6 @@
 {
   "name": "opencode-usage-tracker",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Track AI provider usage (Copilot, OpenAI) directly in OpenCode",
   "type": "module",
   "main": "./index.ts",
@@ -46,5 +46,9 @@
     "@opentui/solid": "^0.1.96",
     "@types/bun": "latest",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "diff": "^8.0.3",
+    "file-type": "^21.3.1"
   }
 }
