@@ -103,7 +103,7 @@ test("Response mapping: known buckets become windows, null buckets are skipped",
 
   expect(card.error).toBeUndefined();
 
-  const session = card.windows.find((w) => w.label === "Session (5h)");
+  const session = card.windows.find((w) => w.label === "5h");
   const weekly = card.windows.find((w) => w.label === "Weekly");
   const opus = card.windows.find((w) => w.label === "Opus Weekly");
 

@@ -59,7 +59,7 @@ interface AnthropicUsageResponse {
 }
 
 const KNOWN_BUCKETS: ReadonlyArray<{ key: keyof AnthropicUsageResponse; label: string }> = [
-  { key: "five_hour", label: "Session (5h)" },
+  { key: "five_hour", label: "5h" },
   { key: "seven_day", label: "Weekly" },
   { key: "seven_day_oauth_apps", label: "OAuth Apps Weekly" },
   { key: "seven_day_opus", label: "Opus Weekly" },
