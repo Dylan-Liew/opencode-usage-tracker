@@ -201,6 +201,14 @@ function buildUsageWindow(label: string, bucket: unknown): UsageWindow | undefin
   };
 }
 
+/**
+ * The usage endpoint returns credit amounts in minor units (cents), so a
+ * monthly_limit of 2000 means 20.00. Convert to major units with 2 decimals.
+ */
+function formatCredits(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
 function buildExtraUsageRows(extraUsage: unknown): Record<string, string> {
   const rows: Record<string, string> = {};
 
@@ -218,11 +226,11 @@ function buildExtraUsageRows(extraUsage: unknown): Record<string, string> {
   }
 
   if (typeof extraUsage.monthly_limit === "number" && Number.isFinite(extraUsage.monthly_limit)) {
-    rows["Monthly Limit"] = `${extraUsage.monthly_limit}${currencySuffix}`;
+    rows["Monthly Limit"] = `${formatCredits(extraUsage.monthly_limit)}${currencySuffix}`;
   }
 
   if (typeof extraUsage.used_credits === "number" && Number.isFinite(extraUsage.used_credits)) {
-    rows["Used Credits"] = `${extraUsage.used_credits}${currencySuffix}`;
+    rows["Used Credits"] = `${formatCredits(extraUsage.used_credits)}${currencySuffix}`;
   }
 
   if (typeof extraUsage.utilization === "number" && Number.isFinite(extraUsage.utilization)) {

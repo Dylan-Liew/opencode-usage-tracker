@@ -118,8 +118,8 @@ test("extra_usage rows: enabled row and monetary/utilization rows are produced",
     five_hour: { utilization: 0.1, resets_at: null },
     extra_usage: {
       is_enabled: true,
-      monthly_limit: 100,
-      used_credits: 25,
+      monthly_limit: 2000,
+      used_credits: 50,
       currency: "USD",
       utilization: 0.5,
       disabled_reason: null,
@@ -135,8 +135,8 @@ test("extra_usage rows: enabled row and monetary/utilization rows are produced",
   const extra = card.extra!;
 
   expect(extra["Extra Usage"]).toBe("Enabled");
-  expect(extra["Monthly Limit"]).toBe("100 USD");
-  expect(extra["Used Credits"]).toBe("25 USD");
+  expect(extra["Monthly Limit"]).toBe("20.00 USD");
+  expect(extra["Used Credits"]).toBe("0.50 USD");
   expect(extra["Extra Usage Used"]).toBe("50%");
   // disabled_reason is null -> no row.
   expect(extra["Disabled Reason"]).toBeUndefined();
