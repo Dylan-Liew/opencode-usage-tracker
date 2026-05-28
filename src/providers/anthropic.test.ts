@@ -134,7 +134,7 @@ test("extra_usage: enabled with a limit renders a bar plus a compact credits row
 
   // Extra usage spend is shown as a bar (window), not plain text rows.
   const extraWindow = card.windows.find((w) => w.label === "Extra Usage");
-  expect(extraWindow?.usedPercent).toBe(50);
+  expect(extraWindow?.usedPercent).toBe(2.5);
   expect(extraWindow?.used).toBe(0.5);
   expect(extraWindow?.limit).toBe(20);
   expect(extraWindow?.unit).toBe("USD");
@@ -147,6 +147,50 @@ test("extra_usage: enabled with a limit renders a bar plus a compact credits row
   expect(extra["Extra Usage Used"]).toBeUndefined();
   // disabled_reason is null -> no row.
   expect(extra["Disabled Reason"]).toBeUndefined();
+});
+
+test("extra_usage: enabled with zero used credits renders a zero-percent spend bar", async () => {
+  stubFetch({
+    five_hour: { utilization: 0.1, resets_at: null },
+    extra_usage: {
+      is_enabled: true,
+      monthly_limit: 2000,
+      used_credits: 0,
+      currency: "SGD",
+    },
+  });
+  const rawAuth: RawAuthJson = { anthropic: { access: "oauth-tok" } };
+
+  const cards = await anthropicProvider.fetchFromRawAuth(rawAuth);
+  const card = mainCard(cards);
+
+  const extraWindow = card.windows.find((w) => w.label === "Extra Usage");
+  expect(extraWindow?.usedPercent).toBe(0);
+  expect(extraWindow?.used).toBe(0);
+  expect(extraWindow?.limit).toBe(20);
+  expect(extraWindow?.unit).toBe("SGD");
+  expect(card.extra?.["Credits"]).toBe("0.00 / 20.00 SGD");
+});
+
+test("extra_usage: utilization fallback does not render fake zero credits", async () => {
+  stubFetch({
+    five_hour: { utilization: 0.1, resets_at: null },
+    extra_usage: {
+      is_enabled: true,
+      monthly_limit: 2000,
+      currency: "USD",
+      utilization: 0.5,
+    },
+  });
+  const rawAuth: RawAuthJson = { anthropic: { access: "oauth-tok" } };
+
+  const cards = await anthropicProvider.fetchFromRawAuth(rawAuth);
+  const card = mainCard(cards);
+
+  const extraWindow = card.windows.find((w) => w.label === "Extra Usage");
+  expect(extraWindow?.usedPercent).toBe(50);
+  expect(card.extra?.["Credits"]).toBeUndefined();
+  expect(card.extra?.["Monthly Limit"]).toBe("20.00 USD");
 });
 
 test("extra_usage: disabled (no limit) falls back to text rows", async () => {

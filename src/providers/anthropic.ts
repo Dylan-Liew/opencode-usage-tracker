@@ -238,10 +238,11 @@ function buildExtraUsage(extraUsage: unknown): { window?: UsageWindow; rows: Rec
   let window: UsageWindow | undefined;
 
   if (enabled !== false && monthlyLimit !== undefined && monthlyLimit > 0) {
+    const hasUsedCredits = usedCredits !== undefined;
     const used = usedCredits ?? 0;
-    const usedPercent = utilization !== undefined
-      ? normalizeUtilization(utilization)
-      : Math.max(0, Math.min(100, (used / monthlyLimit) * 100));
+    const usedPercent = hasUsedCredits
+      ? Math.max(0, Math.min(100, (usedCredits / monthlyLimit) * 100))
+      : normalizeUtilization(utilization ?? 0);
 
     window = {
       label: "Extra Usage",
@@ -252,7 +253,11 @@ function buildExtraUsage(extraUsage: unknown): { window?: UsageWindow; rows: Rec
       source: "endpoint",
     };
 
-    rows["Credits"] = `${formatCredits(used)} / ${formatCredits(monthlyLimit)}${currencySuffix}`;
+    if (hasUsedCredits) {
+      rows["Credits"] = `${formatCredits(used)} / ${formatCredits(monthlyLimit)}${currencySuffix}`;
+    } else {
+      rows["Monthly Limit"] = `${formatCredits(monthlyLimit)}${currencySuffix}`;
+    }
   } else {
     if (enabled !== undefined) {
       rows["Extra Usage"] = enabled ? "Enabled" : "Disabled";
