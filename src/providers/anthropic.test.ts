@@ -113,13 +113,13 @@ test("Response mapping: known buckets become windows, null buckets are skipped",
   expect(opus).toBeUndefined();
 });
 
-test("extra_usage (enabled with limit): rendered as a usage bar plus amount row", async () => {
+test("extra_usage: enabled with a limit renders a bar plus a compact credits row", async () => {
   stubFetch({
     five_hour: { utilization: 0.1, resets_at: null },
     extra_usage: {
       is_enabled: true,
       monthly_limit: 2000,
-      used_credits: 500,
+      used_credits: 50,
       currency: "USD",
       utilization: 0.5,
       disabled_reason: null,
@@ -132,20 +132,24 @@ test("extra_usage (enabled with limit): rendered as a usage bar plus amount row"
 
   expect(card.error).toBeUndefined();
 
-  // Bar: used (500c) / limit (2000c) = 25%, amounts in major units.
-  const bar = card.windows.find((w) => w.label === "Extra Usage");
-  expect(bar).toBeDefined();
-  expect(bar?.usedPercent).toBe(25);
-  expect(bar?.used).toBe(5);
-  expect(bar?.limit).toBe(20);
-  expect(bar?.unit).toBe("USD");
+  // Extra usage spend is shown as a bar (window), not plain text rows.
+  const extraWindow = card.windows.find((w) => w.label === "Extra Usage");
+  expect(extraWindow?.usedPercent).toBe(50);
+  expect(extraWindow?.used).toBe(0.5);
+  expect(extraWindow?.limit).toBe(20);
+  expect(extraWindow?.unit).toBe("USD");
 
-  // Amount row gives the dollar figures the bar can't show.
-  expect(card.extra?.["Extra Usage"]).toBe("5.00 / 20.00 USD");
-  expect(card.extra?.["Disabled Reason"]).toBeUndefined();
+  const extra = card.extra!;
+  expect(extra["Credits"]).toBe("0.50 / 20.00 USD");
+  // The bar replaces the standalone amount/percent rows.
+  expect(extra["Monthly Limit"]).toBeUndefined();
+  expect(extra["Used Credits"]).toBeUndefined();
+  expect(extra["Extra Usage Used"]).toBeUndefined();
+  // disabled_reason is null -> no row.
+  expect(extra["Disabled Reason"]).toBeUndefined();
 });
 
-test("extra_usage (disabled): shown as a descriptive row, no bar", async () => {
+test("extra_usage: disabled (no limit) falls back to text rows", async () => {
   stubFetch({
     five_hour: { utilization: 0.1, resets_at: null },
     extra_usage: {
@@ -154,7 +158,7 @@ test("extra_usage (disabled): shown as a descriptive row, no bar", async () => {
       used_credits: null,
       currency: null,
       utilization: null,
-      disabled_reason: null,
+      disabled_reason: "Spending limit not configured",
     },
   });
   const rawAuth: RawAuthJson = { anthropic: { access: "oauth-tok" } };
@@ -163,7 +167,9 @@ test("extra_usage (disabled): shown as a descriptive row, no bar", async () => {
   const card = mainCard(cards);
 
   expect(card.windows.find((w) => w.label === "Extra Usage")).toBeUndefined();
-  expect(card.extra?.["Extra Usage"]).toBe("Disabled");
+  const extra = card.extra!;
+  expect(extra["Extra Usage"]).toBe("Disabled");
+  expect(extra["Disabled Reason"]).toBe("Spending limit not configured");
 });
 
 test("Error mapping: 401 expired/invalid", async () => {

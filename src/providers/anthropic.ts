@@ -209,14 +209,14 @@ function formatCredits(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-function toFiniteNumber(value: unknown): number | undefined {
+function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 /**
- * Build the extra-usage section. When extra usage is enabled with a spending
- * limit, it is rendered as a usage bar (used credits vs monthly limit) plus an
- * amount row. Otherwise it falls back to descriptive rows.
+ * Build the extra-usage view. When extra usage is enabled with a spending
+ * limit, the spend is shown as a progress bar (used credits vs monthly limit)
+ * plus a compact amount row. Otherwise it falls back to plain text rows.
  */
 function buildExtraUsage(extraUsage: unknown): { window?: UsageWindow; rows: Record<string, string> } {
   const rows: Record<string, string> = {};
@@ -230,49 +230,52 @@ function buildExtraUsage(extraUsage: unknown): { window?: UsageWindow; rows: Rec
     : undefined;
   const currencySuffix = currency ? ` ${currency}` : "";
 
-  const isEnabled = extraUsage.is_enabled === true;
-  const monthlyLimit = toFiniteNumber(extraUsage.monthly_limit);
-  const usedCredits = toFiniteNumber(extraUsage.used_credits);
-  const utilization = toFiniteNumber(extraUsage.utilization);
+  const enabled = typeof extraUsage.is_enabled === "boolean" ? extraUsage.is_enabled : undefined;
+  const monthlyLimit = getFiniteNumber(extraUsage.monthly_limit);
+  const usedCredits = getFiniteNumber(extraUsage.used_credits);
+  const utilization = getFiniteNumber(extraUsage.utilization);
 
-  if (typeof extraUsage.disabled_reason === "string" && extraUsage.disabled_reason.trim().length > 0) {
-    rows["Disabled Reason"] = extraUsage.disabled_reason.trim();
-  }
+  let window: UsageWindow | undefined;
 
-  if (!isEnabled) {
-    rows["Extra Usage"] = "Disabled";
-    return { rows };
-  }
-
-  // Enabled with a spending limit: show a bar of used vs limit.
-  if (monthlyLimit !== undefined && monthlyLimit > 0) {
+  if (enabled !== false && monthlyLimit !== undefined && monthlyLimit > 0) {
     const used = usedCredits ?? 0;
-    const window: UsageWindow = {
+    const usedPercent = utilization !== undefined
+      ? normalizeUtilization(utilization)
+      : Math.max(0, Math.min(100, (used / monthlyLimit) * 100));
+
+    window = {
       label: "Extra Usage",
-      usedPercent: Math.max(0, Math.min(100, (used / monthlyLimit) * 100)),
+      usedPercent,
       used: used / 100,
       limit: monthlyLimit / 100,
       unit: currency,
       source: "endpoint",
     };
-    rows["Extra Usage"] = `${formatCredits(used)} / ${formatCredits(monthlyLimit)}${currencySuffix}`;
-    return { window, rows };
+
+    rows["Credits"] = `${formatCredits(used)} / ${formatCredits(monthlyLimit)}${currencySuffix}`;
+  } else {
+    if (enabled !== undefined) {
+      rows["Extra Usage"] = enabled ? "Enabled" : "Disabled";
+    }
+
+    if (monthlyLimit !== undefined) {
+      rows["Monthly Limit"] = `${formatCredits(monthlyLimit)}${currencySuffix}`;
+    }
+
+    if (usedCredits !== undefined) {
+      rows["Used Credits"] = `${formatCredits(usedCredits)}${currencySuffix}`;
+    }
+
+    if (utilization !== undefined) {
+      rows["Extra Usage Used"] = `${normalizeUtilization(utilization)}%`;
+    }
   }
 
-  // Enabled without a usable limit: fall back to a utilization bar if present.
-  if (utilization !== undefined) {
-    return {
-      window: {
-        label: "Extra Usage",
-        usedPercent: normalizeUtilization(utilization),
-        source: "endpoint",
-      },
-      rows,
-    };
+  if (typeof extraUsage.disabled_reason === "string" && extraUsage.disabled_reason.trim().length > 0) {
+    rows["Disabled Reason"] = extraUsage.disabled_reason.trim();
   }
 
-  rows["Extra Usage"] = "Enabled";
-  return { rows };
+  return { window, rows };
 }
 
 async function fetchAnthropicUsage(auth: AnthropicAuth): Promise<UsageCard[]> {
@@ -339,7 +342,11 @@ async function fetchAnthropicUsage(auth: AnthropicAuth): Promise<UsageCard[]> {
       }
     }
 
-    const extra = buildExtraUsageRows(data.extra_usage);
+    const extraUsage = buildExtraUsage(data.extra_usage);
+    if (extraUsage.window) {
+      windows.push(extraUsage.window);
+    }
+    const extra = extraUsage.rows;
     const hasExtra = Object.keys(extra).length > 0;
 
     if (windows.length === 0 && !hasExtra) {
