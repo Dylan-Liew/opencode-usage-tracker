@@ -113,13 +113,13 @@ test("Response mapping: known buckets become windows, null buckets are skipped",
   expect(opus).toBeUndefined();
 });
 
-test("extra_usage rows: enabled row and monetary/utilization rows are produced", async () => {
+test("extra_usage (enabled with limit): rendered as a usage bar plus amount row", async () => {
   stubFetch({
     five_hour: { utilization: 0.1, resets_at: null },
     extra_usage: {
       is_enabled: true,
       monthly_limit: 2000,
-      used_credits: 50,
+      used_credits: 500,
       currency: "USD",
       utilization: 0.5,
       disabled_reason: null,
@@ -131,15 +131,39 @@ test("extra_usage rows: enabled row and monetary/utilization rows are produced",
   const card = mainCard(cards);
 
   expect(card.error).toBeUndefined();
-  expect(card.extra).toBeDefined();
-  const extra = card.extra!;
 
-  expect(extra["Extra Usage"]).toBe("Enabled");
-  expect(extra["Monthly Limit"]).toBe("20.00 USD");
-  expect(extra["Used Credits"]).toBe("0.50 USD");
-  expect(extra["Extra Usage Used"]).toBe("50%");
-  // disabled_reason is null -> no row.
-  expect(extra["Disabled Reason"]).toBeUndefined();
+  // Bar: used (500c) / limit (2000c) = 25%, amounts in major units.
+  const bar = card.windows.find((w) => w.label === "Extra Usage");
+  expect(bar).toBeDefined();
+  expect(bar?.usedPercent).toBe(25);
+  expect(bar?.used).toBe(5);
+  expect(bar?.limit).toBe(20);
+  expect(bar?.unit).toBe("USD");
+
+  // Amount row gives the dollar figures the bar can't show.
+  expect(card.extra?.["Extra Usage"]).toBe("5.00 / 20.00 USD");
+  expect(card.extra?.["Disabled Reason"]).toBeUndefined();
+});
+
+test("extra_usage (disabled): shown as a descriptive row, no bar", async () => {
+  stubFetch({
+    five_hour: { utilization: 0.1, resets_at: null },
+    extra_usage: {
+      is_enabled: false,
+      monthly_limit: null,
+      used_credits: null,
+      currency: null,
+      utilization: null,
+      disabled_reason: null,
+    },
+  });
+  const rawAuth: RawAuthJson = { anthropic: { access: "oauth-tok" } };
+
+  const cards = await anthropicProvider.fetchFromRawAuth(rawAuth);
+  const card = mainCard(cards);
+
+  expect(card.windows.find((w) => w.label === "Extra Usage")).toBeUndefined();
+  expect(card.extra?.["Extra Usage"]).toBe("Disabled");
 });
 
 test("Error mapping: 401 expired/invalid", async () => {

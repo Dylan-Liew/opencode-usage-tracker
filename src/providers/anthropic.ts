@@ -209,11 +209,20 @@ function formatCredits(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
-function buildExtraUsageRows(extraUsage: unknown): Record<string, string> {
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * Build the extra-usage section. When extra usage is enabled with a spending
+ * limit, it is rendered as a usage bar (used credits vs monthly limit) plus an
+ * amount row. Otherwise it falls back to descriptive rows.
+ */
+function buildExtraUsage(extraUsage: unknown): { window?: UsageWindow; rows: Record<string, string> } {
   const rows: Record<string, string> = {};
 
   if (!isRecord(extraUsage)) {
-    return rows;
+    return { rows };
   }
 
   const currency = typeof extraUsage.currency === "string" && extraUsage.currency.trim().length > 0
@@ -221,27 +230,49 @@ function buildExtraUsageRows(extraUsage: unknown): Record<string, string> {
     : undefined;
   const currencySuffix = currency ? ` ${currency}` : "";
 
-  if (typeof extraUsage.is_enabled === "boolean") {
-    rows["Extra Usage"] = extraUsage.is_enabled ? "Enabled" : "Disabled";
-  }
-
-  if (typeof extraUsage.monthly_limit === "number" && Number.isFinite(extraUsage.monthly_limit)) {
-    rows["Monthly Limit"] = `${formatCredits(extraUsage.monthly_limit)}${currencySuffix}`;
-  }
-
-  if (typeof extraUsage.used_credits === "number" && Number.isFinite(extraUsage.used_credits)) {
-    rows["Used Credits"] = `${formatCredits(extraUsage.used_credits)}${currencySuffix}`;
-  }
-
-  if (typeof extraUsage.utilization === "number" && Number.isFinite(extraUsage.utilization)) {
-    rows["Extra Usage Used"] = `${normalizeUtilization(extraUsage.utilization)}%`;
-  }
+  const isEnabled = extraUsage.is_enabled === true;
+  const monthlyLimit = toFiniteNumber(extraUsage.monthly_limit);
+  const usedCredits = toFiniteNumber(extraUsage.used_credits);
+  const utilization = toFiniteNumber(extraUsage.utilization);
 
   if (typeof extraUsage.disabled_reason === "string" && extraUsage.disabled_reason.trim().length > 0) {
     rows["Disabled Reason"] = extraUsage.disabled_reason.trim();
   }
 
-  return rows;
+  if (!isEnabled) {
+    rows["Extra Usage"] = "Disabled";
+    return { rows };
+  }
+
+  // Enabled with a spending limit: show a bar of used vs limit.
+  if (monthlyLimit !== undefined && monthlyLimit > 0) {
+    const used = usedCredits ?? 0;
+    const window: UsageWindow = {
+      label: "Extra Usage",
+      usedPercent: Math.max(0, Math.min(100, (used / monthlyLimit) * 100)),
+      used: used / 100,
+      limit: monthlyLimit / 100,
+      unit: currency,
+      source: "endpoint",
+    };
+    rows["Extra Usage"] = `${formatCredits(used)} / ${formatCredits(monthlyLimit)}${currencySuffix}`;
+    return { window, rows };
+  }
+
+  // Enabled without a usable limit: fall back to a utilization bar if present.
+  if (utilization !== undefined) {
+    return {
+      window: {
+        label: "Extra Usage",
+        usedPercent: normalizeUtilization(utilization),
+        source: "endpoint",
+      },
+      rows,
+    };
+  }
+
+  rows["Extra Usage"] = "Enabled";
+  return { rows };
 }
 
 async function fetchAnthropicUsage(auth: AnthropicAuth): Promise<UsageCard[]> {
