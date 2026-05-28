@@ -1,7 +1,7 @@
 {
   "name": "opencode-usage-tracker",
   "version": "0.1.5",
-  "description": "Track AI provider usage (Copilot, OpenAI) directly in OpenCode",
+  "description": "Track AI provider usage (Copilot, OpenAI, Anthropic) directly in OpenCode",
   "type": "module",
   "main": "./index.ts",
   "module": "./index.ts",
@@ -33,7 +33,8 @@
     "plugin",
     "usage",
     "copilot",
-    "openai"
+    "openai",
+    "anthropic"
   ],
   "author": "Dylan Liew",
   "license": "MIT",

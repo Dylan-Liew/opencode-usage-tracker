@@ -4,6 +4,7 @@
 
 import type { UsageProviderDefinition } from "../types.ts";
 import type { RawAuthJson } from "../utils/auth.ts";
+import { anthropicProvider } from "./anthropic.ts";
 import { copilotProvider } from "./copilot.ts";
 import { kimiProvider } from "./kimi.ts";
 import { minimaxProvider } from "./minimax.ts";
@@ -36,6 +37,7 @@ export interface ProviderScopeOption {
  */
 const REGISTERED_PROVIDERS = [
   openAIProvider,
+  anthropicProvider,
   copilotProvider,
   minimaxProvider,
   kimiProvider,
