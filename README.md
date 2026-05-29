@@ -7,6 +7,7 @@ Track provider usage inside OpenCode with a native TUI dialog through a simple `
 ## Supported Providers
 
 - Codex
+- Anthropic
 - GitHub Copilot
 - MiniMax (new, untested)
 - Kimi (new, untested)
