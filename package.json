@@ -1,6 +1,6 @@
 {
   "name": "opencode-usage-tracker",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Track AI provider usage (Copilot, OpenAI) directly in OpenCode",
   "type": "module",
   "main": "./index.ts",
@@ -13,11 +13,12 @@
       "import": "./src/server.ts"
     },
     "./tui": {
-      "import": "./src/tui.tsx"
+      "import": "./dist/tui.js"
     }
   },
   "files": [
     "index.ts",
+    "dist",
     "src"
   ],
   "repository": {
@@ -39,6 +40,7 @@
   "author": "Dylan Liew",
   "license": "MIT",
   "scripts": {
+    "build": "bun build src/tui.tsx --outfile dist/tui.js --target bun --no-bundle",
     "test": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
