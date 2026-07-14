@@ -40,7 +40,6 @@
   "author": "Dylan Liew",
   "license": "MIT",
   "scripts": {
-    "build": "bun build src/tui.tsx --outfile dist/tui.js --target bun --no-bundle",
     "test": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
