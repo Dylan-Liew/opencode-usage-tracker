@@ -8,9 +8,9 @@ import {
   getConfiguredProviderScopeOptions,
   getProviderScopeLabelFromValue,
   isProviderScope
-} from "./providers/index.ts";
-import { fetchUsageResult } from "./usage.ts";
-import { getRawAuthJson } from "./utils/auth.ts";
+} from "../src/providers/index.ts";
+import { fetchUsageResult } from "../src/usage.ts";
+import { getRawAuthJson } from "../src/utils/auth.ts";
 const PLUGIN_ID = "opencode-usage-tracker";
 const BAR_LABEL_WIDTH = 10;
 const BAR_LABEL_MAX_WIDTH = 18;
