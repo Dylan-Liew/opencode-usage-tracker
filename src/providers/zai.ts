@@ -49,6 +49,7 @@ interface ZaiUsageResponse {
     plan?: string;
     plan_type?: string;
     packageName?: string;
+    level?: string;
     limits?: ZaiLimit[];
   };
   limits?: ZaiLimit[];
@@ -97,12 +98,13 @@ function getAuthVariants(apiKey: string): string[] {
     return [];
   }
 
-  const variants = [trimmed];
-  if (!/^bearer\s+/i.test(trimmed)) {
-    variants.push(`Bearer ${trimmed}`);
+  if (/^bearer\s+/i.test(trimmed)) {
+    return [trimmed];
   }
 
-  return variants;
+  // Z.AI documents Bearer authentication. Keep the raw key as a compatibility
+  // fallback for older gateways that accepted it directly.
+  return [`Bearer ${trimmed}`, trimmed];
 }
 
 function ensureUniqueLabel(baseLabel: string, usedLabels: Set<string>): string {
@@ -124,13 +126,13 @@ function ensureUniqueLabel(baseLabel: string, usedLabels: Set<string>): string {
 function buildLabel(limit: ZaiLimit, state: ZaiLabelState): string {
   const type = limit.type;
 
-  if (type === "TOKENS_LIMIT") {
+  if (type === "TOKENS_LIMIT" || type === "CREDIT_LIMIT") {
     state.tokenLimitCount += 1;
 
     if (limit.unit === 3 && limit.number === 5) {
       return ensureUniqueLabel("Session (5h)", state.usedLabels);
     }
-    if (limit.unit === 6 && limit.number === 7) {
+    if (limit.unit === 6 && (limit.number === 1 || limit.number === 7)) {
       return ensureUniqueLabel("Weekly", state.usedLabels);
     }
 
@@ -162,7 +164,7 @@ function buildLabel(limit: ZaiLimit, state: ZaiLabelState): string {
     return ensureUniqueLabel("Session (5h)", state.usedLabels);
   }
 
-  if (limit.unit === 6 && limit.number === 7) {
+  if (limit.unit === 6 && (limit.number === 1 || limit.number === 7)) {
     return ensureUniqueLabel("Weekly", state.usedLabels);
   }
 
@@ -197,7 +199,7 @@ function parseResetTime(limit: ZaiLimit): { resetTime?: string; rawResetAt?: str
     return {};
   }
 
-  const milliseconds = limit.nextResetTime > 2_000_000_000_000
+  const milliseconds = limit.nextResetTime > 10_000_000_000
     ? limit.nextResetTime
     : limit.nextResetTime * 1000;
   const resetDate = new Date(milliseconds);
@@ -257,6 +259,7 @@ function getZaiPlanType(response: ZaiUsageResponse | undefined): string | undefi
     response?.data?.plan,
     response?.data?.plan_type,
     response?.data?.packageName,
+    response?.data?.level,
   ];
 
   for (const candidate of candidates) {

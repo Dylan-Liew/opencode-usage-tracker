@@ -11,7 +11,7 @@ Track provider usage inside OpenCode with a native TUI dialog through a simple `
 - GitHub Copilot
 - MiniMax (new, untested)
 - Kimi (new, untested)
-- Z.AI (new, untested)
+- Z.AI Coding Plan
 
 ## Install
 
