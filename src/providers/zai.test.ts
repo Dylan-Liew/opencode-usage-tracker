@@ -83,17 +83,15 @@ test("maps current CREDIT_LIMIT payload into session and weekly windows", async 
   const rawAuth: RawAuthJson = { "zai-coding-plan": { key: "zai-key" } };
 
   const card = mainCard(await zaiProvider.fetchFromRawAuth(rawAuth));
-  const session = card.windows.find((window) => window.label === "Session (5h)");
+  const session = card.windows.find((window) => window.label === "5h");
   const weekly = card.windows.find((window) => window.label === "Weekly");
 
   expect(card.error).toBeUndefined();
-  expect(card.planType).toBe("max");
+  expect(card.planType).toBe("Max");
   expect(session?.usedPercent).toBe(0);
-  expect(session?.remaining).toBe(28_000);
   expect(weekly?.usedPercent).toBe(3);
-  expect(weekly?.used).toBe(4_652);
-  expect(weekly?.limit).toBe(140_000);
   expect(weekly?.rawResetAt).toBe(new Date(1_788_349_029_978).toISOString());
+  expect(card.extra).toBeUndefined();
 });
 
 test("already-prefixed Bearer tokens are not prefixed twice", async () => {

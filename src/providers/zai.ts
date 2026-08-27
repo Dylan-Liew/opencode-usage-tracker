@@ -20,21 +20,14 @@ interface ZaiAuth {
   baseHost?: string;
 }
 
-interface ZaiLimitUsageDetail {
-  modelCode?: string;
-  usage?: number;
-}
-
 interface ZaiLimit {
   type?: string;
   unit?: number;
   number?: number;
   usage?: number;
   currentValue?: number;
-  remaining?: number;
   percentage?: number;
   nextResetTime?: number;
-  usageDetails?: ZaiLimitUsageDetail[];
 }
 
 interface ZaiUsageResponse {
@@ -130,14 +123,14 @@ function buildLabel(limit: ZaiLimit, state: ZaiLabelState): string {
     state.tokenLimitCount += 1;
 
     if (limit.unit === 3 && limit.number === 5) {
-      return ensureUniqueLabel("Session (5h)", state.usedLabels);
+      return ensureUniqueLabel("5h", state.usedLabels);
     }
     if (limit.unit === 6 && (limit.number === 1 || limit.number === 7)) {
       return ensureUniqueLabel("Weekly", state.usedLabels);
     }
 
     if (state.tokenLimitCount === 1) {
-      return ensureUniqueLabel("Session (5h)", state.usedLabels);
+      return ensureUniqueLabel("5h", state.usedLabels);
     }
     if (state.tokenLimitCount === 2) {
       return ensureUniqueLabel("Weekly", state.usedLabels);
@@ -161,7 +154,7 @@ function buildLabel(limit: ZaiLimit, state: ZaiLabelState): string {
   }
 
   if (limit.unit === 3 && limit.number === 5) {
-    return ensureUniqueLabel("Session (5h)", state.usedLabels);
+    return ensureUniqueLabel("5h", state.usedLabels);
   }
 
   if (limit.unit === 6 && (limit.number === 1 || limit.number === 7)) {
@@ -259,7 +252,6 @@ function getZaiPlanType(response: ZaiUsageResponse | undefined): string | undefi
     response?.data?.plan,
     response?.data?.plan_type,
     response?.data?.packageName,
-    response?.data?.level,
   ];
 
   for (const candidate of candidates) {
@@ -268,11 +260,13 @@ function getZaiPlanType(response: ZaiUsageResponse | undefined): string | undefi
     }
   }
 
-  return undefined;
+  const level = response?.data?.level?.trim();
+  return level ? `${level.charAt(0).toUpperCase()}${level.slice(1)}` : undefined;
 }
 
 function compareZaiLimits(left: ZaiLimit, right: ZaiLimit): number {
-  if (left.type === "TOKENS_LIMIT" && right.type === "TOKENS_LIMIT") {
+  const quotaTypes = new Set(["TOKENS_LIMIT", "CREDIT_LIMIT"]);
+  if (quotaTypes.has(left.type ?? "") && quotaTypes.has(right.type ?? "")) {
     const leftReset = typeof left.nextResetTime === "number" ? left.nextResetTime : Number.POSITIVE_INFINITY;
     const rightReset = typeof right.nextResetTime === "number" ? right.nextResetTime : Number.POSITIVE_INFINITY;
     return leftReset - rightReset;
@@ -281,12 +275,7 @@ function compareZaiLimits(left: ZaiLimit, right: ZaiLimit): number {
   return 0;
 }
 
-function buildMainCard(input: {
-  windows: UsageWindow[];
-  planType?: string;
-  extra?: Record<string, string>;
-  error?: string;
-}): UsageCard[] {
+function buildMainCard(input: { windows: UsageWindow[]; planType?: string; error?: string }): UsageCard[] {
   return [
     {
       providerId: zaiProvider.id,
@@ -296,7 +285,6 @@ function buildMainCard(input: {
       sectionOrder: 10,
       planType: input.planType,
       windows: input.windows,
-      extra: input.extra,
       error: input.error,
     },
   ];
@@ -355,7 +343,6 @@ async function fetchZaiUsage(auth: ZaiAuth): Promise<UsageCard[]> {
 
     const limits = readLimits(result.data).sort(compareZaiLimits);
     const windows: UsageWindow[] = [];
-    const extra: Record<string, string> = {};
     const labelState: ZaiLabelState = {
       tokenLimitCount: 0,
       timeLimitCount: 0,
@@ -374,45 +361,17 @@ async function fetchZaiUsage(auth: ZaiAuth): Promise<UsageCard[]> {
       windows.push({
         label,
         usedPercent: percent,
-        used: typeof limit.currentValue === "number" ? limit.currentValue : undefined,
-        remaining: typeof limit.remaining === "number" ? limit.remaining : undefined,
-        limit: typeof limit.usage === "number" ? limit.usage : undefined,
         resetTime,
         rawResetAt,
         source,
       });
-
-      if (typeof limit.currentValue === "number" && typeof limit.usage === "number") {
-        extra[`${label} Used`] = `${limit.currentValue}/${limit.usage}`;
-      }
-
-      if (typeof limit.remaining === "number") {
-        extra[`${label} Remaining`] = `${limit.remaining}`;
-      }
-
-      if (Array.isArray(limit.usageDetails) && limit.usageDetails.length > 0) {
-        const modelUsage = limit.usageDetails
-          .map((detail) => {
-            const modelCode = detail?.modelCode?.trim();
-            const usage = detail?.usage;
-            if (!modelCode || typeof usage !== "number") {
-              return undefined;
-            }
-            return `${modelCode}: ${usage}`;
-          })
-          .filter((value): value is string => value !== undefined);
-
-        if (modelUsage.length > 0) {
-          extra[`${label} Model Usage`] = modelUsage.join(", ");
-        }
-      }
     }
 
     windows.sort((left, right) => {
-      if (left.label === "Session (5h)") {
+      if (left.label === "5h") {
         return -1;
       }
-      if (right.label === "Session (5h)") {
+      if (right.label === "5h") {
         return 1;
       }
       return 0;
@@ -428,7 +387,6 @@ async function fetchZaiUsage(auth: ZaiAuth): Promise<UsageCard[]> {
     return buildMainCard({
       windows,
       planType: getZaiPlanType(result.data),
-      extra: Object.keys(extra).length > 0 ? extra : undefined,
     });
   } catch (error) {
     return buildMainCard({ windows: [], error: getFetchErrorMessage(error) });
