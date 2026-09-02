@@ -117,21 +117,29 @@ export function formatUsageTable(providers: UsageCard[]): string {
 }
 
 /**
- * Format a relative time string with date in local timezone
+ * Fixed display timezone offset from UTC in minutes (UTC+8).
+ * Provider reset times are UTC instants; render them in UTC+8 regardless of
+ * the host system timezone.
+ */
+const DISPLAY_TZ_OFFSET_MINUTES = 8 * 60;
+
+/**
+ * Format a relative time string with date, displayed in UTC+8
  */
 export function formatRelativeTime(date: Date, options?: { includeDate?: boolean }): string {
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
   const includeDate = options?.includeDate ?? true;
-  
-  // Format date as DD/MM/YY in local timezone
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = String(date.getFullYear()).slice(-2);
+
+  // Format date as DD/MM/YY in the fixed display timezone (UTC+8)
+  const shifted = new Date(date.getTime() + DISPLAY_TZ_OFFSET_MINUTES * 60_000);
+  const day = String(shifted.getUTCDate()).padStart(2, "0");
+  const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const year = String(shifted.getUTCFullYear()).slice(-2);
   const dateStr = `${day}/${month}/${year}`;
-  const hours24 = date.getHours();
+  const hours24 = shifted.getUTCHours();
   const hours12 = hours24 % 12 || 12;
-  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const minutes = String(shifted.getUTCMinutes()).padStart(2, "0");
   const period = hours24 >= 12 ? "PM" : "AM";
   const timeStr = `${hours12}:${minutes} ${period}`;
 
