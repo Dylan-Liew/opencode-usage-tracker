@@ -19,11 +19,9 @@ const USAGE_COMMAND_SHOW = "plugin.usage.show";
 const BAR_LABEL_WIDTH = 10;
 const BAR_LABEL_MAX_WIDTH = 18;
 const BAR_PERCENT_WIDTH = 4;
-const BAR_TRACK_MIN_WIDTH = 12;
 
 interface UsageBarLayout {
-  trackWidth: `${number}%`;
-  trackMinWidth: number;
+  trackWidth: number;
 }
 
 interface UsageMetaRow {
@@ -50,9 +48,15 @@ interface UsageProviderView {
 }
 
 function getUsageBarLayout(terminalWidth: number): UsageBarLayout {
-  if (terminalWidth >= 128) return { trackWidth: "60%", trackMinWidth: 18 };
-  if (terminalWidth >= 96) return { trackWidth: "56%", trackMinWidth: 16 };
-  return { trackWidth: "52%", trackMinWidth: BAR_TRACK_MIN_WIDTH };
+  return { trackWidth: terminalWidth >= 128 ? 40 : terminalWidth >= 96 ? 28 : 18 };
+}
+
+export function getUsageBarSegments(percent: number, width: number): { filled: string; remaining: string } {
+  const filledWidth = Math.round((Math.max(0, Math.min(100, percent)) / 100) * width);
+  return {
+    filled: "█".repeat(filledWidth),
+    remaining: "░".repeat(width - filledWidth),
+  };
 }
 
 function getUsageBarLabelWidth(windows: UsageWindow[]): number {
@@ -121,6 +125,7 @@ function UsageBar(props: { context: Context; window: UsageWindow; layout: UsageB
       : percent >= 75
         ? theme.text.feedback.warning.default
         : theme.text.action.primary.default;
+  const segments = () => getUsageBarSegments(percent, props.layout.trackWidth);
 
   return (
     <box width="100%" maxWidth="100%" flexDirection="row" alignItems="center" gap={1}>
@@ -129,17 +134,12 @@ function UsageBar(props: { context: Context; window: UsageWindow; layout: UsageB
       </text>
       <box
         width={props.layout.trackWidth}
-        minWidth={props.layout.trackMinWidth}
-        maxWidth="100%"
-        height={1}
         flexDirection="row"
-        flexShrink={1}
+        flexShrink={0}
         gap={0}
-        backgroundColor={theme.background.default}
       >
-        <Show when={percent > 0}>
-          <box width={`${percent}%`} height={1} backgroundColor={color} />
-        </Show>
+        <text fg={color}>{segments().filled}</text>
+        <text fg={theme.text.subdued}>{segments().remaining}</text>
       </box>
       <text fg={color} attributes={TextAttributes.BOLD} width={BAR_PERCENT_WIDTH} minWidth={BAR_PERCENT_WIDTH} flexShrink={0}>
         {`${percent}%`.padStart(BAR_PERCENT_WIDTH, " ")}
