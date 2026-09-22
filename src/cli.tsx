@@ -59,6 +59,12 @@ export function getUsageBarSegments(percent: number, width: number): { filled: s
   };
 }
 
+export function getUsageBarHue(percent: number): "green" | "orange" | "red" {
+  if (percent >= 90) return "red";
+  if (percent >= 75) return "orange";
+  return "green";
+}
+
 function getUsageBarLabelWidth(windows: UsageWindow[]): number {
   return windows.reduce(
     (width, window) => Math.max(width, Math.min(BAR_LABEL_MAX_WIDTH, Math.max(BAR_LABEL_WIDTH, window.label.length))),
@@ -119,12 +125,8 @@ function isErroredProvider(provider: UsageProviderView): boolean {
 function UsageBar(props: { context: Context; window: UsageWindow; layout: UsageBarLayout; labelWidth: number }) {
   const theme = props.context.theme;
   const percent = Math.max(0, Math.min(100, Math.round(props.window.usedPercent)));
-  const color =
-    percent >= 90
-      ? theme.text.feedback.error.default
-      : percent >= 75
-        ? theme.text.feedback.warning.default
-        : theme.text.action.primary.default;
+  const tone = props.context.themeMode === "dark" ? 300 : 700;
+  const color = theme.hue[getUsageBarHue(percent)][tone];
   const segments = () => getUsageBarSegments(percent, props.layout.trackWidth);
 
   return (
