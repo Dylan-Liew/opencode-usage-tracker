@@ -23,7 +23,18 @@ opencode plugin -g opencode-usage-tracker
 
 Manual install:
 
-For a global manual install, add `opencode-usage-tracker` to both `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`.
+For an OpenCode V2 global manual install, add the plugin to `~/.config/opencode/opencode.json`. OpenCode loads its server entrypoint and sends its `tui` entrypoint to the CLI:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["opencode-usage-tracker"]
+}
+```
+
+For a local checkout, use `file:///path/to/opencode-usage-tracker`.
+
+For OpenCode V1, add it to both `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`:
 
 `~/.config/opencode/opencode.json`
 
@@ -39,7 +50,7 @@ For a global manual install, add `opencode-usage-tracker` to both `~/.config/ope
 ```json
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-usage-tracker"]
+  "plugin": ["opencode-usage-tracker/tui-v1"]
 }
 ```
 
