@@ -1,1 +1,1 @@
-export { default } from "./src/cli.ts";
+export { default } from "./src/cli.tsx";
