@@ -1,6 +1,6 @@
 {
   "name": "opencode-usage-tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Track AI provider usage (Copilot, OpenAI) directly in OpenCode",
   "type": "module",
   "main": "./index.ts",
