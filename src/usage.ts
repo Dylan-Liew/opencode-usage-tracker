@@ -5,17 +5,16 @@ import {
   type ProviderScope,
 } from "./providers/index.ts";
 import type { UsageCard, UsageProviderDefinition, UsageResult } from "./types.ts";
-import { getRawAuthJson } from "./utils/auth.ts";
+import type { RawAuthJson } from "./utils/auth.ts";
 
-export async function fetchUsageResult(provider: ProviderScope): Promise<UsageResult> {
-  const rawAuth = await getRawAuthJson();
+export async function fetchUsageResult(provider: ProviderScope, rawAuth: RawAuthJson): Promise<UsageResult> {
   const configuredProviders = rawAuth ? getConfiguredProviders(rawAuth) : [];
 
   if (configuredProviders.length === 0) {
     return {
       kind: "empty",
       provider,
-      message: "No providers configured. Add tokens to auth.json first.",
+      message: "No providers configured. Connect a provider using /connect first.",
     };
   }
 
@@ -58,7 +57,7 @@ export async function fetchUsageResult(provider: ProviderScope): Promise<UsageRe
 }
 
 async function fetchUsageData(
-  rawAuth: NonNullable<Awaited<ReturnType<typeof getRawAuthJson>>>,
+  rawAuth: RawAuthJson,
   providers: UsageProviderDefinition[],
 ): Promise<UsageCard[]> {
   const results: UsageCard[] = [];

@@ -1,64 +1,38 @@
-import type { Hooks, PluginInput, PluginModule } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode/plugin";
+import type { Plugin as PluginTypes } from "@opencode/plugin";
+import { usageRpc } from "./rpc.ts";
+import { getConfiguredProviderScopeOptions, isProviderScope } from "./providers/index.ts";
+import { fetchUsageResult } from "./usage.ts";
+import type { RawAuthJson } from "./utils/auth.ts";
 
-/**
- * Server-side bridge for `/usage`.
- *
- * The TUI owns the actual usage UI, but we keep a thin server hook so older
- * installs and non-TUI command paths can still forward `/usage` into the TUI
- * command when available.
- */
-const HANDLED_SENTINEL = "__USAGE_TRACKER_HANDLED__";
-const USAGE_COMMAND_OPEN_PICKER = "plugin.usage.open";
-
-function isUsageCommand(command: string): boolean {
-  return command.replace(/^\//, "") === "usage";
+export async function readCredentials(ctx: PluginTypes.Context): Promise<RawAuthJson> {
+  const result: RawAuthJson = {};
+  for (const integration of (await ctx.integration.list()).data) {
+    try {
+      const connection = await ctx.integration.connection.active(integration.id);
+      if (!connection) continue;
+      const value = await ctx.integration.connection.resolve(connection);
+      if (!value) continue;
+      result[integration.id] = value.type === "key"
+        ? { type: "api", key: value.key, ...value.metadata }
+        : { ...value, ...value.metadata, accountId: value.metadata?.accountID };
+    } catch {
+      // An unavailable optional integration must not hide usage for connected providers.
+    }
+  }
+  return result;
 }
 
-export async function UsageTrackerPlugin({ client }: PluginInput): Promise<Hooks> {
-  return {
-    "command.execute.before": async (input, output) => {
-      if (!isUsageCommand(input.command)) {
-        return;
-      }
-
-      let result;
-      try {
-        result = await client.tui.executeCommand({
-          body: { command: USAGE_COMMAND_OPEN_PICKER },
-        });
-      } catch {
-        throw new Error(
-          "Usage dialog unavailable. Make sure an OpenCode TUI session is running and the usage plugin is loaded.",
-        );
-      }
-
-      if (result.error || result.data !== true) {
-        const message = "Usage dialog could not be opened by the TUI. Ensure the TUI plugin is loaded and try again.";
-
-        await client.tui.showToast({
-          body: {
-            title: "Usage",
-            message,
-            variant: "warning",
-          },
-        });
-
-        throw new Error(message);
-      }
-
-      return stopCommandFlow(output);
-    },
-  };
-}
-
-function stopCommandFlow(output: { parts: unknown[] }): void {
-  void output;
-  throw new Error(HANDLED_SENTINEL);
-}
-
-const module: PluginModule & { id: string } = {
+export default Plugin.define({
   id: "opencode-usage-tracker",
-  server: UsageTrackerPlugin,
-};
-
-export default module;
+  async setup(ctx) {
+    await ctx.rpc.register(usageRpc, {
+      providers: async () => getConfiguredProviderScopeOptions(await readCredentials(ctx)),
+      usage: async (input) => {
+        const { provider } = input as { provider: string };
+        if (!isProviderScope(provider)) throw new Error("Unknown usage provider");
+        return fetchUsageResult(provider, await readCredentials(ctx));
+      },
+    });
+  },
+});

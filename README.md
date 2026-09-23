@@ -4,6 +4,9 @@
 
 Track provider usage inside OpenCode with a native TUI dialog through a simple `/usage` command.
 
+> [!IMPORTANT]
+> Version 1.x supports OpenCode v2 only. OpenCode v1 is no longer supported; use the final 0.x release if you must remain on v1.
+
 ## Supported Providers
 
 - Codex
@@ -23,7 +26,7 @@ opencode plugin -g opencode-usage-tracker
 
 Manual install:
 
-For an OpenCode V2 global manual install, add the plugin to `~/.config/opencode/opencode.json`. OpenCode loads its server entrypoint and sends its `tui` entrypoint to the CLI:
+For an OpenCode v2 global manual install, add the plugin to `~/.config/opencode/opencode.json`. OpenCode loads its server entrypoint and sends its `tui` entrypoint to the CLI:
 
 ```json
 {
@@ -33,26 +36,6 @@ For an OpenCode V2 global manual install, add the plugin to `~/.config/opencode/
 ```
 
 For a local checkout, use `file:///path/to/opencode-usage-tracker`.
-
-For OpenCode V1, add it to both `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`:
-
-`~/.config/opencode/opencode.json`
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-usage-tracker"]
-}
-```
-
-`~/.config/opencode/tui.json`
-
-```json
-{
-  "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["opencode-usage-tracker/tui-v1"]
-}
-```
 
 ## Try It
 

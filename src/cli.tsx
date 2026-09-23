@@ -6,13 +6,12 @@ import { useTerminalDimensions } from "@opentui/solid";
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import {
   ALL_PROVIDERS_SCOPE,
-  getConfiguredProviderScopeOptions,
+  type ProviderScopeOption,
   getProviderScopeLabelFromValue,
   type ProviderScope,
 } from "./providers/index.ts";
 import type { UsageCard, UsageResult, UsageWindow } from "./types.ts";
-import { fetchUsageResult } from "./usage.ts";
-import { getRawAuthJson } from "./utils/auth.ts";
+import { usageRpc } from "./rpc.ts";
 
 const PLUGIN_ID = "opencode-usage-tracker";
 const USAGE_COMMAND_SHOW = "plugin.usage.show";
@@ -131,7 +130,7 @@ function UsageBar(props: { context: Context; window: UsageWindow; layout: UsageB
 
   return (
     <box width="100%" maxWidth="100%" flexDirection="row" alignItems="center" gap={1}>
-      <text fg={theme.text.default} width={props.labelWidth} minWidth={BAR_LABEL_WIDTH} maxWidth={BAR_LABEL_MAX_WIDTH} flexShrink={0}>
+      <text fg={theme.text.base} width={props.labelWidth} minWidth={BAR_LABEL_WIDTH} maxWidth={BAR_LABEL_MAX_WIDTH} flexShrink={0}>
         {props.window.label}
       </text>
       <box
@@ -141,7 +140,7 @@ function UsageBar(props: { context: Context; window: UsageWindow; layout: UsageB
         gap={0}
       >
         <text fg={color}>{segments().filled}</text>
-        <text fg={theme.text.subdued}>{segments().remaining}</text>
+        <text fg={theme.text.muted}>{segments().remaining}</text>
       </box>
       <text fg={color} attributes={TextAttributes.BOLD} width={BAR_PERCENT_WIDTH} minWidth={BAR_PERCENT_WIDTH} flexShrink={0}>
         {`${percent}%`.padStart(BAR_PERCENT_WIDTH, " ")}
@@ -158,15 +157,15 @@ function SectionBlock(props: { context: Context; section: UsageSectionView; barL
     <box width="100%" maxWidth="100%" flexDirection="column" gap={0}>
       <Show when={props.section.label}>
         <box flexDirection="column" paddingBottom={1}>
-          <text fg={theme.text.default} attributes={TextAttributes.BOLD}>{props.section.label}</text>
+          <text fg={theme.text.base} attributes={TextAttributes.BOLD}>{props.section.label}</text>
         </box>
       </Show>
       <Show when={props.section.note}>
-        <text fg={theme.text.subdued} paddingBottom={1}>{props.section.note}</text>
+        <text fg={theme.text.muted} paddingBottom={1}>{props.section.note}</text>
       </Show>
       <Show
         when={!props.section.error}
-        fallback={<text fg={theme.text.feedback.error.default}>{props.section.error}</text>}
+        fallback={<text fg={theme.text.feedback.error.base}>{props.section.error}</text>}
       >
         <box flexDirection="column" gap={0}>
           <For each={props.section.windows}>
@@ -181,15 +180,15 @@ function SectionBlock(props: { context: Context; section: UsageSectionView; barL
               <For each={props.section.rows}>
                 {(row) => (
                   <box flexDirection="row" justifyContent="space-between" gap={2}>
-                    <text fg={theme.text.subdued}>{row.label}</text>
-                    <text fg={theme.text.default}>{row.value}</text>
+                    <text fg={theme.text.muted}>{row.label}</text>
+                    <text fg={theme.text.base}>{row.value}</text>
                   </box>
                 )}
               </For>
             </box>
           </Show>
           <Show when={props.section.windows.length === 0 && props.section.rows.length === 0}>
-            <text fg={theme.text.subdued}>No usage data reported.</text>
+            <text fg={theme.text.muted}>No usage data reported.</text>
           </Show>
         </box>
       </Show>
@@ -209,14 +208,14 @@ function ProviderCard(props: { context: Context; provider: UsageProviderView; ba
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={theme.background.default}
-      borderColor={theme.border.default}
+      backgroundColor={theme.background.base}
+      borderColor={theme.border.base}
       borderStyle="rounded"
     >
       <box flexDirection="row" justifyContent="space-between" paddingBottom={1}>
-        <text fg={theme.text.default} attributes={TextAttributes.BOLD}>{props.provider.provider}</text>
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>{props.provider.provider}</text>
         <Show when={props.provider.planType}>
-          <text fg={theme.text.subdued}>{props.provider.planType}</text>
+          <text fg={theme.text.muted}>{props.provider.planType}</text>
         </Show>
       </box>
       <box width="100%" maxWidth="100%" flexDirection="column" gap={1}>
@@ -272,17 +271,17 @@ function UsageDialog(props: { context: Context; result: UsageResult }) {
       <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
         <box flexDirection="row" justifyContent="space-between">
           <box flexDirection="row" gap={1}>
-            <text fg={theme.text.default} attributes={TextAttributes.BOLD}>Usage Tracker</text>
-            <text fg={theme.text.subdued}>{getProviderScopeLabelFromValue(props.result.provider)}</text>
+            <text fg={theme.text.base} attributes={TextAttributes.BOLD}>Usage Tracker</text>
+            <text fg={theme.text.muted}>{getProviderScopeLabelFromValue(props.result.provider)}</text>
           </box>
-          <text fg={theme.text.subdued} onMouseUp={() => props.context.ui.dialog.clear()}>esc</text>
+          <text fg={theme.text.muted} onMouseUp={() => props.context.ui.dialog.clear()}>esc</text>
         </box>
       </box>
 
       <Show when={okResult() && isAllProvidersView() && hiddenErroredProviders().length > 0 && !showErroredProviders()}>
         <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
-          <box paddingLeft={1} paddingRight={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.text.feedback.error.default} borderStyle="rounded">
-            <text fg={theme.text.feedback.error.default}>
+          <box paddingLeft={1} paddingRight={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.text.feedback.error.base} borderStyle="rounded">
+            <text fg={theme.text.feedback.error.base}>
               {`${hiddenErroredProviders().length} provider(s) hidden — unable to fetch quota. Press h to show.`}
             </text>
           </box>
@@ -290,7 +289,7 @@ function UsageDialog(props: { context: Context; result: UsageResult }) {
       </Show>
       <Show when={okResult() && isAllProvidersView() && hiddenErroredProviders().length > 0 && showErroredProviders()}>
         <box paddingLeft={4} paddingRight={4} paddingBottom={1}>
-          <text fg={theme.text.subdued}>{`Showing ${hiddenErroredProviders().length} errored provider(s). Press h to hide.`}</text>
+          <text fg={theme.text.muted}>{`Showing ${hiddenErroredProviders().length} errored provider(s). Press h to hide.`}</text>
         </box>
       </Show>
 
@@ -298,8 +297,8 @@ function UsageDialog(props: { context: Context; result: UsageResult }) {
         <Show when={okResult()}>
           <box width="100%" maxWidth="100%" flexDirection="column" gap={1}>
             <Show when={onlyHiddenErroredProviders()}>
-              <box padding={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.border.default} borderStyle="rounded">
-                <text fg={theme.text.subdued}>All visible providers are hidden. Press h to show errored providers.</text>
+              <box padding={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.border.base} borderStyle="rounded">
+                <text fg={theme.text.muted}>All visible providers are hidden. Press h to show errored providers.</text>
               </box>
             </Show>
             <For each={visibleProviderViews()}>
@@ -308,8 +307,8 @@ function UsageDialog(props: { context: Context; result: UsageResult }) {
           </box>
         </Show>
         <Show when={messageResult()}>
-          <box padding={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.border.default} borderStyle="rounded">
-            <text fg={messageResult()?.kind === "error" ? theme.text.feedback.error.default : theme.text.subdued}>
+          <box padding={1} backgroundColor={RGBA.fromInts(0, 0, 0, 0)} borderColor={theme.border.base} borderStyle="rounded">
+            <text fg={messageResult()?.kind === "error" ? theme.text.feedback.error.base : theme.text.muted}>
               {messageResult()?.message ?? ""}
             </text>
           </box>
@@ -326,7 +325,7 @@ function openResultDialog(context: Context, result: UsageResult): void {
 async function openUsage(context: Context, provider: ProviderScope): Promise<void> {
   context.ui.toast.show({ message: "Fetching usage data...", variant: "info", duration: 2000 });
   try {
-    openResultDialog(context, await fetchUsageResult(provider));
+    openResultDialog(context, await context.client.rpc(usageRpc).usage({ provider }, { location: context.location }) as UsageResult);
   } catch (error) {
     openResultDialog(context, {
       kind: "error",
@@ -337,8 +336,7 @@ async function openUsage(context: Context, provider: ProviderScope): Promise<voi
 }
 
 async function openPicker(context: Context): Promise<void> {
-  const rawAuth = await getRawAuthJson();
-  const options = rawAuth ? getConfiguredProviderScopeOptions(rawAuth) : [];
+  const options = await context.client.rpc(usageRpc).providers({}, { location: context.location }) as ProviderScopeOption[];
   if (options.length < 2) {
     await openUsage(context, options[0]?.value ?? ALL_PROVIDERS_SCOPE);
     return;
